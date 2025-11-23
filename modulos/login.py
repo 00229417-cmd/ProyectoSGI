@@ -2,10 +2,8 @@
 import streamlit as st
 from modulos.db.crud_users import create_user, verify_user_credentials
 
-# ----------------------------------------------------------
-# Función segura para ejecutar rerun (si existe)
-# ----------------------------------------------------------
 def _safe_rerun():
+    """Llamar a experimental_rerun si está disponible."""
     try:
         if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
             st.experimental_rerun()
@@ -15,36 +13,46 @@ def _safe_rerun():
     return False
 
 
-# ----------------------------------------------------------
-# Formulario de LOGIN
-# ----------------------------------------------------------
 def _render_login_form():
+    """
+    Formulario de login con comportamiento:
+     - Si se hace submit y credenciales ok -> set session + rerun inmediato y RETURN
+     - Si no ok -> mostrar error y quedarse en login
+    """
     with st.form("login_form_v1", clear_on_submit=False):
         username = st.text_input("Usuario", placeholder="usuario.ejemplo", key="login_user")
         password = st.text_input("Contraseña", type="password", placeholder="********", key="login_pass")
         submitted = st.form_submit_button("Entrar")
 
         if submitted:
-            ok, u_or_msg = verify_user_credentials(username, password)
+            try:
+                ok, u_or_msg = verify_user_credentials(username, password)
+            except Exception as e:
+                st.error("Error al verificar credenciales.")
+                return
+
             if ok:
                 user = u_or_msg
-                # actualizar session_state
+                # --- marcar sesión inmediatamente ---
                 st.session_state["session_iniciada"] = True
                 st.session_state["usuario"] = user.get("username")
                 st.session_state["user_role"] = user.get("role")
 
-                # mensaje rápido y forzar rerun para que la app principal se muestre
+                # mensaje rápido (opcional)
                 st.success(f"Bienvenido {user.get('full_name') or user.get('username')}!")
-                # fuerza recarga inmediata para que el login desaparezca en este mismo run
+
+                # Forzamos rerun y retornamos para evitar que el mismo run siga renderizando el formulario.
                 _safe_rerun()
+                return
             else:
                 st.error("Usuario o contraseña incorrecta.")
 
 
-# ----------------------------------------------------------
-# Formulario de REGISTRO (sin login automático)
-# ----------------------------------------------------------
 def _render_register_form():
+    """
+    Formulario registro dentro de expander.
+    No hace login automático; sólo crea el usuario y recarga para cerrar el expander.
+    """
     with st.form("register_form_v1", clear_on_submit=True):
         st.markdown("### Crear nuevo usuario")
 
@@ -60,8 +68,6 @@ def _render_register_form():
         submit_reg = st.form_submit_button("Registrar")
 
         if submit_reg:
-
-            # Validaciones básicas
             if not new_user or not new_pass:
                 st.error("Usuario y contraseña son obligatorios.")
                 return
@@ -69,51 +75,47 @@ def _render_register_form():
                 st.error("Las contraseñas no coinciden.")
                 return
 
-            # Crear usuario
             try:
-                ok = create_user(
-                    new_user,
-                    new_pass,
-                    full_name=new_name or None,
-                    email=new_email or None,
-                    role=role
-                )
-            except Exception as e:
+                ok = create_user(new_user, new_pass, full_name=new_name or None, email=new_email or None, role=role)
+            except Exception:
                 st.error("Error interno al crear el usuario.")
                 return
 
-            # Resultado
             if ok:
                 st.success("Usuario creado correctamente. Ya puedes iniciar sesión.")
-                # NOTA: no hacemos login automático. Solo recargamos para cerrar expander.
+                # recarga para cerrar expander
                 _safe_rerun()
+                return
             else:
                 st.error("No se pudo crear el usuario. ¿Nombre ya existe?")
 
 
-# ----------------------------------------------------------
-# Página principal de LOGIN
-# ----------------------------------------------------------
 def login_page():
     """
     Página de login centrada con:
       - Formulario de inicio
-      - Expander para registro
+      - Expander 'Registrar usuario' debajo
+    Si la sesión ya está iniciada -> retornar sin renderizar nada.
     """
-
-    # Si ya hay sesión iniciada, no renderizamos nada (evita que el login permanezca visible)
+    # Si ya está iniciada la sesión, no mostramos el login (esto evita que se vea tras rerun)
     if st.session_state.get("session_iniciada"):
         return
 
     left_col, main_col, right_col = st.columns([1, 2, 1])
 
     with main_col:
-        # LOGIN
+        # Render login form. Si el usuario hace login con éxito, la función _render_login_form
+        # hará un rerun y retornará sin que el resto del page siga.
         _render_login_form()
+
+        # Si, por alguna razón, la sesión fue activada dentro del mismo run y no se produjo rerun,
+        # comprobamos aquí y salimos inmediatamente (previene mostrar el expander después de login).
+        if st.session_state.get("session_iniciada"):
+            return
 
         st.markdown("---")
 
-        # REGISTRO (expander debajo del login)
+        # Expander de registro (debajo)
         with st.expander("Registrar usuario", expanded=False):
             _render_register_form()
 
@@ -122,5 +124,6 @@ def login_page():
         st.markdown("")
     with right_col:
         st.markdown("")
+
 
 
