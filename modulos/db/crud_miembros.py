@@ -1,193 +1,185 @@
-
-# modulos/db/crud_miembro.py
-"""
-CRUD para la tabla `miembro`.
-
-Funciones incluidas:
-- create_member(...)
-- get_member_by_id(id)
-- get_member_by_dui(dui)
-- list_members(limit=100, offset=0, search=None)
-- update_member(member_id, **fields)
-- soft_delete_member(member_id)   -> marca estado = 'inactivo'
-- hard_delete_member(member_id)   -> elimina fila (USE CON PRECAUCIÓN)
-"""
-
+# modulos/db/crud_miembros.py
 from typing import Optional, List, Dict, Any
-import logging
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from modulos.config.conexion import get_engine
-
-logger = logging.getLogger(__name__)
 
 
 def _row_to_dict(row) -> Dict[str, Any]:
-    """Convierte una RowMapping a dict o devuelve None si row es None."""
-    return dict(row) if row is not None else None
+    """Convierte row.mapping / row a dict, si es None devuelve None"""
+    if not row:
+        return None
+    try:
+        return dict(row)
+    except Exception:
+        # si no es RowMapping, intenta convertir por atributos
+        return {k: getattr(row, k) for k in row.keys()}
 
 
-def create_member(
-    id_tipo_usuario: Optional[int] = None,
-    nombre: Optional[str] = None,
-    apellido: Optional[str] = None,
-    dui: Optional[str] = None,
-    direccion: Optional[str] = None,
-    telefono: Optional[str] = None,
-    email: Optional[str] = None,
-    id_grupo: Optional[int] = None,
-    estado: str = "activo",
-) -> Optional[int]:
+# -------------------------
+# Listar miembros (paginado simple)
+# -------------------------
+def list_members(limit: int = 200, offset: int = 0) -> List[Dict[str, Any]]:
     """
-    Inserta un nuevo miembro. Devuelve el id creado (int) o None en error.
-    Los nombres de columnas deben coincidir con tu tabla `miembro`.
+    Devuelve una lista de miembros (limit, offset).
     """
     engine = get_engine()
-    sql = text(
+    q = text(
         """
-        INSERT INTO miembro
-            (id_tipo_usuario, nombre, apellido, dui, direccion, telefono, email, id_grupo, estado)
-        VALUES
-            (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion, :telefono, :email, :id_grupo, :estado)
+        SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion
+        FROM miembro
+        ORDER BY id_miembro DESC
+        LIMIT :lim OFFSET :off
         """
     )
-    params = {
-        "id_tipo_usuario": id_tipo_usuario,
-        "nombre": nombre,
-        "apellido": apellido,
-        "dui": dui,
-        "direccion": direccion,
-        "telefono": telefono,
-        "email": email,
-        "id_grupo": id_grupo,
-        "estado": estado,
-    }
-
-    try:
-        with engine.begin() as conn:
-            res = conn.execute(sql, params)
-            # En MySQL, obtener id insertado con SELECT LAST_INSERT_ID()
-            r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).mappings().first()
-            return int(r["id"]) if r and r.get("id") is not None else None
-    except Exception as e:
-        logger.exception("Error creando miembro: %s", e)
-        return None
+    with engine.connect() as conn:
+        rows = conn.execute(q, {"lim": limit, "off": offset}).mappings().all()
+        return [dict(r) for r in rows]
 
 
+# -------------------------
+# Obtener miembro por id
+# -------------------------
 def get_member_by_id(member_id: int) -> Optional[Dict[str, Any]]:
-    """Devuelve un dict con los datos del miembro o None si no existe."""
     engine = get_engine()
-    sql = text("SELECT * FROM miembro WHERE id_miembro = :id LIMIT 1")
+    q = text(
+        """
+        SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion
+        FROM miembro
+        WHERE id_miembro = :mid
+        LIMIT 1
+        """
+    )
+    with engine.connect() as conn:
+        r = conn.execute(q, {"mid": member_id}).mappings().first()
+        return dict(r) if r else None
+
+
+# -------------------------
+# Buscar miembros por nombre/apellido parcial
+# -------------------------
+def search_members(term: str, limit: int = 100) -> List[Dict[str, Any]]:
+    engine = get_engine()
+    like = f"%{term}%"
+    q = text(
+        """
+        SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion
+        FROM miembro
+        WHERE nombre LIKE :like OR apellido LIKE :like OR dui LIKE :like
+        ORDER BY nombre, apellido
+        LIMIT :lim
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(q, {"like": like, "lim": limit}).mappings().all()
+        return [dict(r) for r in rows]
+
+
+# -------------------------
+# Crear miembro
+# -------------------------
+def create_member(id_tipo_usuario: Optional[int],
+                  nombre: str,
+                  apellido: str,
+                  dui: Optional[str] = None,
+                  direccion: Optional[str] = None) -> Optional[int]:
+    """
+    Inserta un miembro; devuelve el id generado si se puede obtener (MySQL),
+    o True si la inserción se completó y el driver no provee lastrowid.
+    """
+    engine = get_engine()
+    q = text(
+        """
+        INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion)
+        VALUES (:tid, :nombre, :apellido, :dui, :direccion)
+        """
+    )
     try:
-        with engine.connect() as conn:
-            r = conn.execute(sql, {"id": member_id}).mappings().first()
-            return _row_to_dict(r)
-    except Exception as e:
-        logger.exception("Error get_member_by_id: %s", e)
+        with engine.begin() as conn:
+            res = conn.execute(q, {
+                "tid": id_tipo_usuario,
+                "nombre": nombre,
+                "apellido": apellido,
+                "dui": dui,
+                "direccion": direccion
+            })
+            # intentar devolver lastrowid cuando esté disponible
+            try:
+                last = getattr(res, "lastrowid", None)
+                return last or True
+            except Exception:
+                return True
+    except SQLAlchemyError as e:
+        # opcional: loggear e información de error
+        # print("create_member error:", e)
         return None
 
 
-def get_member_by_dui(dui: str) -> Optional[Dict[str, Any]]:
-    """Buscar miembro por DUI (único)."""
-    engine = get_engine()
-    sql = text("SELECT * FROM miembro WHERE dui = :dui LIMIT 1")
-    try:
-        with engine.connect() as conn:
-            r = conn.execute(sql, {"dui": dui}).mappings().first()
-            return _row_to_dict(r)
-    except Exception as e:
-        logger.exception("Error get_member_by_dui: %s", e)
-        return None
-
-
-def list_members(limit: int = 100, offset: int = 0, search: Optional[str] = None) -> List[Dict[str, Any]]:
+# -------------------------
+# Actualizar miembro
+# -------------------------
+def update_member(member_id: int,
+                  id_tipo_usuario: Optional[int] = None,
+                  nombre: Optional[str] = None,
+                  apellido: Optional[str] = None,
+                  dui: Optional[str] = None,
+                  direccion: Optional[str] = None) -> bool:
     """
-    Lista miembros con paginación.
-    Si `search` está presente, hace búsqueda simple en nombre/apellido/dui.
+    Actualiza campos no nulos provistos. Devuelve True si filas afectadas > 0.
     """
     engine = get_engine()
-    try:
-        with engine.connect() as conn:
-            if search:
-                q = text(
-                    """
-                    SELECT * FROM miembro
-                    WHERE nombre LIKE :s OR apellido LIKE :s OR dui LIKE :s
-                    ORDER BY id_miembro DESC
-                    LIMIT :lim OFFSET :off
-                    """
-                )
-                param = {"s": f"%{search}%", "lim": limit, "off": offset}
-                rows = conn.execute(q, param).mappings().all()
-            else:
-                q = text(
-                    """
-                    SELECT * FROM miembro
-                    ORDER BY id_miembro DESC
-                    LIMIT :lim OFFSET :off
-                    """
-                )
-                rows = conn.execute(q, {"lim": limit, "off": offset}).mappings().all()
-            return [dict(r) for r in rows]
-    except Exception as e:
-        logger.exception("Error list_members: %s", e)
-        return []
 
+    # construir SET dinámico
+    sets = []
+    params = {"mid": member_id}
+    if id_tipo_usuario is not None:
+        sets.append("id_tipo_usuario = :id_tipo_usuario")
+        params["id_tipo_usuario"] = id_tipo_usuario
+    if nombre is not None:
+        sets.append("nombre = :nombre")
+        params["nombre"] = nombre
+    if apellido is not None:
+        sets.append("apellido = :apellido")
+        params["apellido"] = apellido
+    if dui is not None:
+        sets.append("dui = :dui")
+        params["dui"] = dui
+    if direccion is not None:
+        sets.append("direccion = :direccion")
+        params["direccion"] = direccion
 
-def update_member(member_id: int, **fields) -> bool:
-    """
-    Actualiza los campos proporcionados para el miembro.
-    Uso: update_member(3, nombre='Juan', direccion='Nueva')
-    Devuelve True si se actualizó al menos una fila.
-    """
-    if not fields:
+    if not sets:
+        # nada que actualizar
         return False
 
-    # Validar keys válidas (evitar inyección de columnas)
-    valid_cols = {
-        "id_tipo_usuario",
-        "nombre",
-        "apellido",
-        "dui",
-        "direccion",
-        "telefono",
-        "email",
-        "id_grupo",
-        "estado",
-    }
-    set_parts = []
-    params = {}
-    for k, v in fields.items():
-        if k in valid_cols:
-            set_parts.append(f"{k} = :{k}")
-            params[k] = v
-    if not set_parts:
-        return False
+    set_sql = ", ".join(sets)
+    q = text(f"UPDATE miembro SET {set_sql} WHERE id_miembro = :mid")
 
-    params["id_miembro"] = member_id
-    sql = text(f"UPDATE miembro SET {', '.join(set_parts)} WHERE id_miembro = :id_miembro")
-    engine = get_engine()
     try:
         with engine.begin() as conn:
-            res = conn.execute(sql, params)
-            return (res.rowcount if hasattr(res, "rowcount") else 0) > 0
-    except Exception as e:
-        logger.exception("Error update_member: %s", e)
+            res = conn.execute(q, params)
+            try:
+                return (res.rowcount or 0) > 0
+            except Exception:
+                # drivers distintos pueden comportarse distinto; asumir True si no hay excepción
+                return True
+    except SQLAlchemyError:
         return False
 
 
-def soft_delete_member(member_id: int) -> bool:
-    """Marca el miembro como inactivo (estado='inactivo')."""
-    return update_member(member_id, estado="inactivo")
-
-
-def hard_delete_member(member_id: int) -> bool:
-    """Elimina físicamente el miembro (usar con precaución)."""
+# -------------------------
+# Eliminar miembro
+# -------------------------
+def delete_member(member_id: int) -> bool:
     engine = get_engine()
-    sql = text("DELETE FROM miembro WHERE id_miembro = :id")
+    q = text("DELETE FROM miembro WHERE id_miembro = :mid")
     try:
         with engine.begin() as conn:
-            res = conn.execute(sql, {"id": member_id})
-            return (res.rowcount if hasattr(res, "rowcount") else 0) > 0
-    except Exception as e:
-        logger.exception("Error hard_delete_member: %s", e)
+            res = conn.execute(q, {"mid": member_id})
+            try:
+                return (res.rowcount or 0) > 0
+            except Exception:
+                return True
+    except SQLAlchemyError:
         return False
+
