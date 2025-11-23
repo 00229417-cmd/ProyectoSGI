@@ -1,33 +1,20 @@
-import mysql.connector
-import os
 import streamlit as st
+from modulos.config.conexion import test_connection
+from modulos.db.crud_miembros import obtener_miembros
 
-# Obtener las credenciales de las variables de entorno (seguridad)
-host = os.getenv("DB_HOST", "bewuh9yx8e9gctyl08lp-mysql.services.clever-cloud.com")
-user = os.getenv("DB_USER", "uvfz1bhg53yj6hed")
-password = os.getenv("DB_PASSWORD", "F2wwhaaKkEUbS4annYMP")
-database = os.getenv("DB_NAME", "bewuh9yx8e9gctyl08lp")
+st.title("SGI — Proyecto Final")
 
-# Intentar establecer la conexión
-try:
-    conn = mysql.connector.connect(
-        host=host,
-        user=user,
-        password=password,
-        database=database
-    )
-    
-    # Verificar si la conexión fue exitosa
-    if conn.is_connected():
-        st.success("Conexión exitosa a la base de datos MySQL.")
-    else:
-        st.error("No se pudo conectar a la base de datos.")
-        
-except mysql.connector.Error as err:
-    # Mostrar el error si la conexión falla
-    st.error(f"Error al conectar con la base de datos: {err}")
+ok, msg = test_connection()
+if ok:
+    st.success(msg)
+else:
+    st.error(msg)
+    st.stop()
 
-finally:
-    if conn.is_connected():
-        # Cerrar la conexión
-        conn.close()
+menu = st.sidebar.selectbox("Menú", ["Inicio", "Miembros"])
+if menu == "Inicio":
+    st.write("Bienvenido al sistema SGI-GAPC")
+elif menu == "Miembros":
+    st.header("Listado de miembros")
+    st.write(obtener_miembros())
+
