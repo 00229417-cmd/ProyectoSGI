@@ -1,75 +1,85 @@
-# modulos/db/crud_users.py
-from typing import Optional
-from werkzeug.security import generate_password_hash
+# modulos/db/crud_miembros.py
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
-
 from modulos.config.conexion import get_engine
+from datetime import datetime
 
-def create_user_and_member(
-    username: str,
-    password: str,
-    full_name: Optional[str] = None,
-    dni: Optional[str] = None,
-    telefono: Optional[str] = None,
-    direccion: Optional[str] = None,
-    role: str = "user"
-) -> Optional[int]:
+# ---------- MIEMBROS ----------
+# Asume una tabla `miembro` con columnas:
+# id_miembro (PK autoinc), nombre, identificacion, telefono, direccion,
+# fecha_afiliacion (DATE/DATETIME), estado
+
+def crear_miembro(nombre: str, identificacion: str = None, telefono: str = None,
+                  direccion: str = None, fecha_afiliacion: str = None, estado: str = "activo"):
     """
-    Inserta usuario (con hash) y crea también el registro en la tabla `miembro`.
-    Retorna user_id (int) si fue exitoso, None si hubo error.
-    Ajusta nombres de columnas/table si tu ER difiere.
+    Inserta un miembro en la tabla `miembro`.
+    fecha_afiliacion: si None -> se usa current date.
+    Devuelve lastrowid o True.
     """
     engine = get_engine()
-    insert_user_sql = text("""
-        INSERT INTO usuario (username, password_hash, full_name, role)
-        VALUES (:username, :password_hash, :full_name, :role)
-    """)
+    if not fecha_afiliacion:
+        fecha_afiliacion = datetime.utcnow().strftime("%Y-%m-%d")
+    with engine.begin() as conn:
+        q = text("""
+            INSERT INTO miembro (nombre, identificacion, telefono, direccion, fecha_afiliacion, estado)
+            VALUES (:nombre, :ident, :tel, :dir, :fecha, :estado)
+        """)
+        res = conn.execute(q, {
+            "nombre": nombre, "ident": identificacion,
+            "tel": telefono, "dir": direccion,
+            "fecha": fecha_afiliacion, "estado": estado
+        })
+        try:
+            return res.lastrowid or True
+        except Exception:
+            return True
 
-    # ajuste: nombre de la tabla miembro según tu ER; aquí se asume 'miembro' con campo id_usuario
-    insert_miembro_sql = text("""
-        INSERT INTO miembro (id_usuario, nombre, identificacion, telefono, direccion, fecha_afiliacion, estado)
-        VALUES (:id_usuario, :nombre, :identificacion, :telefono, :direccion, CURRENT_DATE(), 'activo')
-    """)
+def obtener_miembro(id_miembro: int):
+    """Retorna dict del miembro o None."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        q = text("SELECT * FROM miembro WHERE id_miembro = :id LIMIT 1")
+        r = conn.execute(q, {"id": id_miembro}).mappings().first()
+        return dict(r) if r else None
 
-    password_hash = generate_password_hash(password)
+def listar_miembros(limit: int = 200, offset: int = 0):
+    """Lista miembros (paginable con limit/offset)."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        q = text("SELECT id_miembro, nombre, identificacion, telefono, direccion, fecha_afiliacion, estado FROM miembro ORDER BY id_miembro DESC LIMIT :lim OFFSET :off")
+        rows = conn.execute(q, {"lim": limit, "off": offset}).mappings().all()
+        return [dict(r) for r in rows]
 
-    try:
-        with engine.begin() as conn:
-            # crear usuario
-            res = conn.execute(insert_user_sql, {
-                "username": username,
-                "password_hash": password_hash,
-                "full_name": full_name,
-                "role": role
-            })
+def actualizar_miembro(id_miembro: int, nombre: str = None, identificacion: str = None,
+                       telefono: str = None, direccion: str = None, estado: str = None):
+    """Actualiza campos provistos del miembro. Devuelve True si se actualizó."""
+    engine = get_engine()
+    set_clauses = []
+    params = {"id": id_miembro}
+    if nombre is not None:
+        set_clauses.append("nombre = :nombre"); params["nombre"] = nombre
+    if identificacion is not None:
+        set_clauses.append("identificacion = :ident"); params["ident"] = identificacion
+    if telefono is not None:
+        set_clauses.append("telefono = :tel"); params["tel"] = telefono
+    if direccion is not None:
+        set_clauses.append("direccion = :dir"); params["dir"] = direccion
+    if estado is not None:
+        set_clauses.append("estado = :estado"); params["estado"] = estado
 
-            # Obtener id del usuario insertado de forma segura
-            # (hacemos SELECT para compatibilidad con distintos drivers)
-            sel = conn.execute(text("SELECT id FROM usuario WHERE username = :username LIMIT 1"), {"username": username})
-            row = sel.fetchone()
-            if not row:
-                raise Exception("No se pudo obtener id del usuario insertado.")
-            user_id = row[0]
+    if not set_clauses:
+        return False
 
-            # crear miembro vinculado (si existe la tabla miembro)
-            try:
-                conn.execute(insert_miembro_sql, {
-                    "id_usuario": user_id,
-                    "nombre": full_name or username,
-                    "identificacion": dni,
-                    "telefono": telefono,
-                    "direccion": direccion
-                })
-            except Exception:
-                # Si la tabla miembro no existe o falla, no abortamos la transacción principal.
-                # Podemos registrar/loggear y continuar. (Si prefieres que falle, lanza la excepción)
-                pass
+    set_sql = ", ".join(set_clauses)
+    with engine.begin() as conn:
+        q = text(f"UPDATE miembro SET {set_sql} WHERE id_miembro = :id")
+        res = conn.execute(q, params)
+        return res.rowcount > 0
 
-            return int(user_id)
-    except SQLAlchemyError as e:
-        print("create_user_and_member SQLAlchemyError:", e)
-        return None
-    except Exception as e:
-        print("create_user_and_member error:", e)
-        return None
+def eliminar_miembro(id_miembro: int):
+    """Elimina (o marca) un miembro. Aquí hacemos delete físico."""
+    engine = get_engine()
+    with engine.begin() as conn:
+        q = text("DELETE FROM miembro WHERE id_miembro = :id")
+        res = conn.execute(q, {"id": id_miembro})
+        return res.rowcount > 0
+
