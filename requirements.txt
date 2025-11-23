@@ -1,11 +1,7 @@
+
 streamlit
-sqlalchemy
-mysql-connector-python
-werkzeug
-python-dotenv
-pandas
 SQLAlchemy>=1.4
 mysql-connector-python
 werkzeug
-streamlit
-
+pandas
+python-dotenv
