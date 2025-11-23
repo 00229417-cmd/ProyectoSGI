@@ -33,14 +33,9 @@ create_user_table_if_not_exists()
 init_session()
 
 # ----------------------------------------
-# Ruta local del ER (workspace). Según tu pedido, esta es la ruta local:
+# Ruta local del ER (workspace):
 ER_LOCAL_URL = "file:///mnt/data/ER proyecto - ER NUEVO.png"
-
-# Si prefieres usar la imagen *raw* de GitHub, copia la URL raw de GitHub aquí y
-# comenta la línea ER_LOCAL_URL arriba y descomenta la siguiente:
-# ER_RAW_URL = "https://raw.githubusercontent.com/tu_usuario/tu_repo/main/path/ER%20proyecto%20-%20ER%20NUEVO.png"
-
-# Usa por defecto la local (puedes cambiar por ER_RAW_URL si la defines)
+# Si prefieres usar raw GitHub, reemplaza ER_LOCAL_URL por la URL raw de GitHub.
 ER_URL = ER_LOCAL_URL
 # ----------------------------------------
 
@@ -48,10 +43,10 @@ def login_page():
     """
     Página de login con estilo 'premium' y registro interactivo.
     - Registro crea usuario + miembro (create_user_and_member).
-    - Botón discreto bottom-right abre la documentación (ER_URL).
+    - Botón discreto bottom-right abre la documentación/ER.
     """
 
-    # small CSS / animaciones
+    # CSS y animaciones sutiles
     st.markdown(
         """
         <style>
@@ -63,10 +58,7 @@ def login_page():
             border-radius:12px; padding:18px; box-shadow:0 12px 30px rgba(0,0,0,0.45);
             animation: fadeInUp 0.6s ease-out both;
         }
-        @keyframes fadeInUp {
-          0% { opacity: 0; transform: translateY(12px); } 
-          100% { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
 
         .logo-small {
           width:76px; height:76px; border-radius:14px;
@@ -76,11 +68,7 @@ def login_page():
           box-shadow: 0 10px 36px rgba(20,40,120,0.28);
           animation: floaty 6s ease-in-out infinite;
         }
-        @keyframes floaty {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-6px); }
-          100% { transform: translateY(0px); }
-        }
+        @keyframes floaty { 0% { transform: translateY(0px); } 50% { transform: translateY(-6px); } 100% { transform: translateY(0px); } }
 
         .brand-title { font-size:28px; margin:0; color:#F7FBFF; }
         .brand-sub { font-size:13px; color:#9FB4D6; margin-top:6px; }
@@ -88,7 +76,6 @@ def login_page():
         .login-title { font-size:18px; color:#EAF2FF; margin-top:6px; }
         .muted { color:#9FB4D6; font-size:13px; margin-bottom:8px; }
 
-        /* boton discreto bottom-right */
         .er-button {
             position: fixed;
             right: 18px;
@@ -104,19 +91,16 @@ def login_page():
             z-index: 9999;
         }
         .er-button svg { width:20px; height:20px; }
-
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # layout: main + empty right column (para estética)
     col_main, col_right = st.columns([1.8, 0.9])
 
     with col_main:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
 
-        # Branding row
         brand_cols = st.columns([0.14, 1])
         with brand_cols[0]:
             st.markdown('<div class="logo-small">G</div>', unsafe_allow_html=True)
@@ -124,16 +108,13 @@ def login_page():
             st.markdown('<div class="brand-title">GAPC — Portal</div>', unsafe_allow_html=True)
             st.markdown('<div class="brand-sub">Sistema de Gestión para Grupos de Ahorro y Préstamo Comunitarios</div>', unsafe_allow_html=True)
 
-        # Login title / desc
         st.markdown('<div class="login-title">Iniciar sesión</div>', unsafe_allow_html=True)
         st.markdown('<div class="muted">Accede con tu usuario y contraseña.</div>', unsafe_allow_html=True)
 
-        # LOGIN form
         with st.form(key="form_login", clear_on_submit=False):
             username = st.text_input("Usuario", placeholder="usuario.ejemplo", label_visibility="collapsed")
             password = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
 
-            # two buttons: Entrar + Registrar usuario (abre expander)
             c1, c2 = st.columns([0.6, 0.4])
             with c1:
                 btn_login = st.form_submit_button("Entrar")
@@ -141,7 +122,6 @@ def login_page():
                 if st.form_submit_button("Registrar usuario", use_container_width=True, key="open_register_btn"):
                     st.session_state.setdefault("mostrar_registro", True)
 
-            # Procesar login
             if btn_login:
                 if not username or not password:
                     st.error("Completa usuario y contraseña.")
@@ -150,12 +130,10 @@ def login_page():
                     if not u:
                         st.error("Usuario no encontrado.")
                     else:
-                        # handle both row-like and mapping results
                         password_hash = u.get("password_hash") if isinstance(u, dict) else getattr(u, "password_hash", None)
                         if password_hash and check_password_hash(password_hash, password):
                             st.session_state["session_iniciada"] = True
                             st.session_state["usuario"] = username
-                            # guardar id/role si están disponibles
                             try:
                                 st.session_state["usuario_id"] = u.get("id") if isinstance(u, dict) else getattr(u, "id", None)
                             except Exception:
@@ -174,7 +152,6 @@ def login_page():
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # EXPANDER de registro (controlado por session_state)
         show_reg = st.session_state.get("mostrar_registro", False)
         exp = st.expander("Registrar usuario" if not show_reg else "Registrar usuario (ocultar)", expanded=show_reg)
         with exp:
@@ -195,7 +172,6 @@ def login_page():
                         st.session_state["mostrar_registro"] = False
 
                 if btn_reg:
-                    # validaciones
                     if not r_user or not r_pwd:
                         st.error("Usuario y contraseña obligatorios.")
                     elif r_pwd != r_pwd2:
@@ -203,7 +179,6 @@ def login_page():
                     elif get_user_by_username(r_user):
                         st.error("Usuario ya existe.")
                     else:
-                        # crear usuario + miembro; la función debe retornar user_id o None
                         user_id = create_user_and_member(
                             username=r_user,
                             password=r_pwd,
@@ -221,11 +196,9 @@ def login_page():
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # col_right la dejamos casi vacía (estética)
     with col_right:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
-    # BOTÓN discreto bottom-right: abre ER_URL en nueva pestaña
     er_html = f'''
     <a href="{ER_URL}" target="_blank" class="er-button" title="Documentación (ER)">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -236,11 +209,9 @@ def login_page():
     '''
     st.markdown(er_html, unsafe_allow_html=True)
 
-
-# Para debug local directo (opcional)
 if __name__ == "__main__":
-    # Ejecuta login_page() si abres el archivo directamente con python (no streamlit)
     try:
         login_page()
     except Exception as e:
         print("Error al ejecutar login_page (debug):", e)
+
