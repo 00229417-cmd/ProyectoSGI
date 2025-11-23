@@ -4,12 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from modulos.config.conexion import get_connection
 
-# ---------- Lectura ----------
 def get_user_by_username(username: str):
-    """
-    Devuelve: dict con columnas de la fila (id_user, username, password_hash, full_name, email, role, active, created_at)
-    o None si no existe / en caso de error.
-    """
     q = text("SELECT id_user, username, password_hash, full_name, email, role, active, created_at "
              "FROM users WHERE username = :u LIMIT 1")
     try:
@@ -18,25 +13,20 @@ def get_user_by_username(username: str):
             row = r.mappings().first()
             return dict(row) if row else None
     except SQLAlchemyError as e:
-        # imprime en logs (Streamlit mostrará en consola); retorna None para no romper la app
         print("SQL ERROR get_user_by_username:", e)
         return None
     except Exception as e:
         print("Unexpected error get_user_by_username:", e)
         return None
 
-# ---------- Creación ----------
 def create_user(username: str, password: str, full_name: str = None, email: str = None, role: str = "user"):
-    """
-    Crea un usuario. Retorna id_user (si available) o True si success / False si falla (por ejemplo username duplicado).
-    """
     hashed = generate_password_hash(password)
     q = text("INSERT INTO users (username, password_hash, full_name, email, role, active, created_at) "
              "VALUES (:u, :ph, :fn, :em, :r, 1, NOW())")
     try:
         with get_connection().begin() as conn:
             res = conn.execute(q, {"u": username, "ph": hashed, "fn": full_name, "em": email, "r": role})
-            # mysql connector exposes lastrowid on result
+            # intenta devolver id insertado
             try:
                 lastid = getattr(res, "lastrowid", None)
                 return lastid if lastid else True
@@ -49,11 +39,7 @@ def create_user(username: str, password: str, full_name: str = None, email: str 
         print("Unexpected error create_user:", e)
         return False
 
-# ---------- Verificación de credenciales ----------
 def verify_user_credentials(username: str, password: str):
-    """
-    Retorna: (True, user_dict) si ok; (False, None) si no; (False, "error mensaje") en caso de fallo técnico.
-    """
     try:
         user = get_user_by_username(username)
         if not user:
@@ -67,7 +53,6 @@ def verify_user_credentials(username: str, password: str):
         print("Unexpected error verify_user_credentials:", e)
         return False, str(e)
 
-# ---------- Listado ----------
 def list_users(limit: int = 200):
     q = text("SELECT id_user, username, full_name, email, role, active, created_at FROM users ORDER BY id_user DESC LIMIT :lim")
     try:
@@ -80,4 +65,5 @@ def list_users(limit: int = 200):
     except Exception as e:
         print("Unexpected error list_users:", e)
         return []
+
 
