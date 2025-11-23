@@ -1,77 +1,89 @@
-# pega justo después de st.set_page_config(...) en app.py
+# app.py 
+import streamlit as st
+from modulos.config.conexion import test_connection, get_engine
+from modulos.login import login_page
+
+st.set_page_config(
+    page_title="GAPC Portal",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ----------------------------
+# CSS: centrar vertical, modal premium, animaciones inputs
+# ----------------------------
 st.markdown(
     """
     <style>
-    /* Fondo degradado azul (full-screen) */
+    /* fondo degradado */
     .stApp {
-        background: linear-gradient(180deg, #071032 0%, #0b2248 40%, #061426 100%);
+        min-height: 100vh;
+        background: linear-gradient(180deg, #071032 0%, #0b2248 45%, #041428 100%);
         background-attachment: fixed;
+        display: flex;
+        align-items: center; /* centra verticalmente */
+        justify-content: center; /* centra horizontalmente */
     }
 
-    /* Contenedor centralizado tipo card */
+    /* contenedor principal centrado (card) */
     .center-card {
-        max-width: 1100px;
-        margin: 18px auto 40px auto;
+        width: min(1150px, 94%);
+        margin: 20px auto;
         padding: 28px;
         border-radius: 14px;
         background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-        box-shadow: 0 10px 30px rgba(3,10,23,0.6);
+        box-shadow: 0 18px 50px rgba(2,8,25,0.7);
         backdrop-filter: blur(6px) saturate(120%);
-        border: 1px solid rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.035);
     }
 
-    /* header: avatar + title */
-    .header-row {
-        display:flex;
-        align-items:center;
-        gap:18px;
-        margin-bottom:18px;
-    }
+    .header-row { display:flex; gap:18px; align-items:center; margin-bottom:14px; }
     .avatar-g {
-        width:72px;
-        height:72px;
-        border-radius:14px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        font-weight:800;
-        color:white;
-        font-size:30px;
+        width:72px; height:72px; border-radius:14px;
+        display:flex; align-items:center; justify-content:center;
+        font-weight:800; color:white; font-size:30px;
         background: linear-gradient(135deg,#5b8bff,#3c67d6);
-        box-shadow: 0 14px 30px rgba(60,103,214,0.18);
-        transform-origin:center;
-        /* animación sutil (respiración) */
+        box-shadow: 0 14px 40px rgba(60,103,214,0.18);
         animation: floaty 4.5s ease-in-out infinite;
     }
-
     @keyframes floaty {
         0% { transform: translateY(0px); }
         50% { transform: translateY(-6px) scale(1.01); }
         100% { transform: translateY(0px); }
     }
+    .header-title { color:#fff; margin:0; font-size:28px; font-weight:700; }
+    .header-sub { color:#9FB4D6; font-size:13px; margin-top:4px; }
 
-    .header-title { color: #fff; margin: 0; font-size:28px; font-weight:700; }
-    .header-sub { color: #9FB4D6; font-size:13px; margin-top:4px; }
-
-    /* centrar contenido del form en la columna izquierda */
-    .form-wrapper {
-       padding-top: 6px;
+    /* inputs animados: sombra + transición en foco */
+    .stTextInput>div>div>input, .stTextInput>div>div>textarea, .stTextInput>div>div>div>input {
+        transition: box-shadow .18s ease, transform .18s ease;
+        border-radius: 8px;
+    }
+    .stTextInput>div>div>input:focus, .stTextInput>div>div>textarea:focus, .stTextInput>div>div>div>input:focus {
+        box-shadow: 0 8px 22px rgba(20,60,120,0.18);
+        transform: translateY(-2px);
+        outline: none;
     }
 
-    /* expander custom */
-    .stExpander {
-        border-radius: 10px;
+    /* boton primario con micro-animacion */
+    .stButton>button {
+        transition: transform .12s ease, box-shadow .12s ease;
     }
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(20,60,120,0.12); }
 
-    /* ajustar inputs (no touch heavy styling to keep streamlit native look) */
-    .stTextInput > label, .stNumberInput > label {
-        color: #C9D8EE;
+    /* modal-like: build with streamlit modal (if supported) and fallback */
+    .modal-card {
+        max-width:720px; padding:20px; border-radius:12px;
+        background: linear-gradient(180deg, #0b1630, #071428);
+        border:1px solid rgba(255,255,255,0.04);
+        box-shadow: 0 30px 80px rgba(2,8,25,0.8);
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-# Header HTML (render)
+
+# header + open card
 st.markdown(
     """
     <div class="center-card">
@@ -85,9 +97,73 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-# ... después de que tu app muestre el login y demás, recuerda cerrar el div:
-# st.markdown("</div>", unsafe_allow_html=True)
 
+# ----------------------------
+# SESSIONS
+# ----------------------------
+st.session_state.setdefault("session_iniciada", False)
+st.session_state.setdefault("usuario", None)
+st.session_state.setdefault("user_role", None)
+
+# si no está logueado -> mostrar login y detener flujo
+if not st.session_state["session_iniciada"]:
+    login_page()
+    st.markdown("</div>", unsafe_allow_html=True)  # cerrar card
+    st.stop()
+
+# ----------------------------
+# APLICACIÓN POST-LOGIN
+# ----------------------------
+with st.sidebar:
+    st.title("Menú")
+    opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
+    st.divider()
+    st.caption(f"Usuario: {st.session_state.get('usuario')}")
+    if st.button("Cerrar sesión"):
+        st.session_state["session_iniciada"] = False
+        st.session_state["usuario"] = None
+        st.session_state["user_role"] = None
+        st.experimental_rerun()
+
+# Test DB (opcional)
+ok, msg = test_connection()
+if not ok:
+    st.warning(f"DB: NO CONECTADO ({msg})")
+else:
+    st.success("DB conectado")
+
+# Páginas
+if opcion == "Dashboard":
+    st.header("Dashboard — Resumen operativo")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total miembros", "—")
+    c2.metric("Préstamos vigentes", "—")
+    c3.metric("Saldo caja", "—")
+    st.subheader("Actividad reciente")
+    st.table([])
+
+elif opcion == "Miembros":
+    st.header("Miembros")
+    st.info("Aquí puedes listar/crear/editar miembros (implementar).")
+
+elif opcion == "Aportes":
+    st.header("Aportes")
+    st.info("Registrar aportes (implementar).")
+
+elif opcion == "Préstamos":
+    st.header("Préstamos")
+    st.info("Solicitudes y pagos (implementar).")
+
+elif opcion == "Caja":
+    st.header("Caja")
+    st.info("Movimientos de caja (implementar).")
+
+elif opcion == "Reportes":
+    st.header("Reportes")
+    st.info("Exportar PDF / Excel (implementar).")
+
+# cerrar card
+st.markdown("</div>", unsafe_allow_html=True)
 
 
 
