@@ -96,62 +96,75 @@ st.session_state.setdefault("session_iniciada", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
-# si no está logueado -> mostrar login
+# ----------------------------
+# Si no está logueado -> mostrar login (no usar st.stop)
+# ----------------------------
 if not st.session_state["session_iniciada"]:
     login_page()
     st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()
-
-# ----------------------------
-# POST LOGIN
-# ----------------------------
-with st.sidebar:
-    st.title("Menú")
-    opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
-    st.divider()
-    st.caption(f"Usuario: {st.session_state.get('usuario')}")
-    if st.button("Cerrar sesión"):
-        st.session_state["session_iniciada"] = False
-        st.session_state["usuario"] = None
-        st.session_state["user_role"] = None
-        st.experimental_rerun()
-
-# Test DB (opcional)
-ok, msg = test_connection()
-if not ok:
-    st.warning(f"DB: NO CONECTADO ({msg})")
 else:
-    st.success("DB conectado")
+    # ----------------------------
+    # POST LOGIN (se ejecuta sólo si session_iniciada == True)
+    # ----------------------------
+    with st.sidebar:
+        st.title("Menú")
+        opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
+        st.divider()
+        st.caption(f"Usuario: {st.session_state.get('usuario')}")
+        if st.button("Cerrar sesión"):
+            st.session_state["session_iniciada"] = False
+            st.session_state["usuario"] = None
+            st.session_state["user_role"] = None
+            # aquí sí intentamos rerun para refrescar la UI
+            try:
+                if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
+                    st.experimental_rerun()
+            except Exception:
+                # JS fallback si fuera necesario
+                st.markdown(
+                    """
+                    <script>setTimeout(function(){ window.location.reload(); }, 200);</script>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-# Páginas
-if opcion == "Dashboard":
-    st.header("Dashboard — Resumen operativo")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total miembros", "—")
-    c2.metric("Préstamos vigentes", "—")
-    c3.metric("Saldo caja", "—")
-    st.subheader("Actividad reciente")
-    st.table([])
+    # Test DB (opcional)
+    ok, msg = test_connection()
+    if not ok:
+        st.warning(f"DB: NO CONECTADO ({msg})")
+    else:
+        st.success("DB conectado")
 
-elif opcion == "Miembros":
-    st.header("Miembros")
-    st.info("Aquí puedes listar/crear/editar miembros (implementar).")
+    # Páginas
+    if opcion == "Dashboard":
+        st.header("Dashboard — Resumen operativo")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total miembros", "—")
+        c2.metric("Préstamos vigentes", "—")
+        c3.metric("Saldo caja", "—")
+        st.subheader("Actividad reciente")
+        st.table([])
 
-elif opcion == "Aportes":
-    st.header("Aportes")
-    st.info("Registrar aportes (implementar).")
+    elif opcion == "Miembros":
+        st.header("Miembros")
+        st.info("Aquí puedes listar/crear/editar miembros (implementar).")
 
-elif opcion == "Préstamos":
-    st.header("Préstamos")
-    st.info("Solicitudes y pagos (implementar).")
+    elif opcion == "Aportes":
+        st.header("Aportes")
+        st.info("Registrar aportes (implementar).")
 
-elif opcion == "Caja":
-    st.header("Caja")
-    st.info("Movimientos de caja (implementar).")
+    elif opcion == "Préstamos":
+        st.header("Préstamos")
+        st.info("Solicitudes y pagos (implementar).")
 
-elif opcion == "Reportes":
-    st.header("Reportes")
-    st.info("Exportar PDF / Excel (implementar).")
+    elif opcion == "Caja":
+        st.header("Caja")
+        st.info("Movimientos de caja (implementar).")
 
-st.markdown("</div>", unsafe_allow_html=True)
+    elif opcion == "Reportes":
+        st.header("Reportes")
+        st.info("Exportar PDF / Excel (implementar).")
+
+    # cerrar card
+    st.markdown("</div>", unsafe_allow_html=True)
 
