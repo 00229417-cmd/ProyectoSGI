@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 from modulos.config.conexion import test_connection
 from modulos.auth.auth import (
@@ -8,10 +7,8 @@ from modulos.auth.auth import (
     register_form,
     logout,
 )
-# guide page
 from modulos.ui_components.guide_page import render_guide_page
 
-# inicializa tabla auth
 create_user_table_if_not_exists()
 init_session()
 
@@ -34,14 +31,13 @@ else:
         logout()
         st.experimental_rerun()
 
-# quick connection status (optional)
+# quick connection status
 ok, msg = test_connection()
 if ok:
     st.sidebar.success("DB: conectado")
 else:
     st.sidebar.error("DB: no conectado")
 
-# Navigation
 menu = st.sidebar.radio("Navegación", ["Dashboard", "Guía visual", "Miembros", "Aportes", "Préstamos", "Reportes"])
 
 if menu == "Guía visual":
@@ -52,4 +48,5 @@ elif menu == "Dashboard":
 else:
     st.header(menu)
     st.write("Página en construcción: pronto aquí podrá gestionar", menu)
+
 
