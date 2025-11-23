@@ -1,4 +1,3 @@
-# app.py 
 import streamlit as st
 from modulos.config.conexion import test_connection, get_engine
 from modulos.login import login_page
@@ -10,7 +9,7 @@ st.set_page_config(
 )
 
 # ----------------------------
-# CSS: centrar vertical, modal premium, animaciones inputs
+# CSS con paneles más anchos
 # ----------------------------
 st.markdown(
     """
@@ -25,9 +24,9 @@ st.markdown(
         justify-content: center; /* centra horizontalmente */
     }
 
-    /* contenedor principal centrado (card) */
+    /* CONTENEDOR PRINCIPAL (AUMENTADO DE ANCHO) */
     .center-card {
-        width: min(1150px, 94%);
+        width: min(1500px, 97%);   /* ← AQUI EL CAMBIO */
         margin: 20px auto;
         padding: 28px;
         border-radius: 14px;
@@ -54,7 +53,7 @@ st.markdown(
     .header-title { color:#fff; margin:0; font-size:28px; font-weight:700; }
     .header-sub { color:#9FB4D6; font-size:13px; margin-top:4px; }
 
-    /* inputs animados: sombra + transición en foco */
+    /* inputs animados */
     .stTextInput>div>div>input, .stTextInput>div>div>textarea, .stTextInput>div>div>div>input {
         transition: box-shadow .18s ease, transform .18s ease;
         border-radius: 8px;
@@ -65,19 +64,11 @@ st.markdown(
         outline: none;
     }
 
-    /* boton primario con micro-animacion */
     .stButton>button {
         transition: transform .12s ease, box-shadow .12s ease;
     }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(20,60,120,0.12); }
 
-    /* modal-like: build with streamlit modal (if supported) and fallback */
-    .modal-card {
-        max-width:720px; padding:20px; border-radius:12px;
-        background: linear-gradient(180deg, #0b1630, #071428);
-        border:1px solid rgba(255,255,255,0.04);
-        box-shadow: 0 30px 80px rgba(2,8,25,0.8);
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -105,14 +96,14 @@ st.session_state.setdefault("session_iniciada", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
-# si no está logueado -> mostrar login y detener flujo
+# si no está logueado -> mostrar login
 if not st.session_state["session_iniciada"]:
     login_page()
-    st.markdown("</div>", unsafe_allow_html=True)  # cerrar card
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # ----------------------------
-# APLICACIÓN POST-LOGIN
+# POST LOGIN
 # ----------------------------
 with st.sidebar:
     st.title("Menú")
@@ -162,9 +153,5 @@ elif opcion == "Reportes":
     st.header("Reportes")
     st.info("Exportar PDF / Excel (implementar).")
 
-# cerrar card
 st.markdown("</div>", unsafe_allow_html=True)
-
-
-
 
