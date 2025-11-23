@@ -1,6 +1,5 @@
 streamlit
 sqlalchemy
-pymysql
-python-dotenv
-werkzeug
+mysql-connector-python
 pandas
+python-dotenv
