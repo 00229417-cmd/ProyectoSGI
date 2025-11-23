@@ -6,15 +6,38 @@ from modulos.db.crud_users import create_user, verify_user_credentials
 # Función segura para ejecutar rerun (sin romper la app)
 # ----------------------------------------------------------
 def _safe_rerun():
-    """Intenta rerun sólo si existe experimental_rerun"""
+    """
+    Intenta primero st.experimental_rerun().
+    Si no está disponible o falla, inyecta un pequeño JS para forzar reload.
+    Devuelve True si se ha intentado una acción de recarga, False en caso contrario.
+    """
+    # 1) intentar experimental_rerun()
     try:
         if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
             st.experimental_rerun()
             return True
     except Exception:
+        # no romper la app; capturamos y seguimos al fallback
         import traceback
         traceback.print_exc()
-    return False
+
+    # 2) fallback con JS (muy fiable en Streamlit web)
+    try:
+        st.markdown(
+            """
+            <script>
+            // mostrar el mensaje un momento para que el usuario lo vea, luego recargar
+            setTimeout(function(){ window.location.reload(); }, 220);
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
+        return True
+    except Exception:
+        # si tampoco funciona JS, devolvemos False
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 # ----------------------------------------------------------
@@ -30,12 +53,18 @@ def _render_login_form():
             ok, u_or_msg = verify_user_credentials(username, password)
             if ok:
                 user = u_or_msg
+                # guardar estado de sesión
                 st.session_state["session_iniciada"] = True
                 st.session_state["usuario"] = user.get("username")
                 st.session_state["user_role"] = user.get("role")
 
                 st.success(f"Bienvenido {user.get('full_name') or user.get('username')}!")
-                _safe_rerun()
+
+                # intentar recargar la app de forma segura (rerun -> fallback JS)
+                did_reload = _safe_rerun()
+                if not did_reload:
+                    # informar instrucciones si no se pudo forzar recarga
+                    st.info("Inicio de sesión correcto. Si no ves la interfaz principal, por favor actualiza la página (F5).")
             else:
                 st.error("Usuario o contraseña incorrecta.")
 
@@ -87,7 +116,10 @@ def _render_register_form():
             # Resultado
             if ok:
                 st.success("Usuario creado correctamente. Ya puedes iniciar sesión.")
-                _safe_rerun()
+                # intentamos forzar reload para cerrar expander / evitar doble-submit
+                did_reload = _safe_rerun()
+                if not did_reload:
+                    st.info("Usuario creado. Si el expander no se cerró, actualiza la página (F5).")
             else:
                 st.error("No se pudo crear el usuario. ¿Nombre ya existe?")
 
@@ -118,5 +150,4 @@ def login_page():
         st.markdown("")
     with right_col:
         st.markdown("")
-
 
