@@ -1,9 +1,7 @@
-# app.py
-import os
+# ---------------------------
+# ULTRA PREMIUM LOGIN (reemplazar la sección de login)
+# ---------------------------
 import streamlit as st
-
-# --- Imports internos ---
-from modulos.config.conexion import test_connection
 from modulos.auth.auth import (
     create_user_table_if_not_exists,
     init_session,
@@ -11,206 +9,260 @@ from modulos.auth.auth import (
     register_user,
     logout,
 )
-from werkzeug.security import check_password_hash
 from modulos.ui_components.guide_page import render_guide_page
+from modulos.config.conexion import test_connection
+from werkzeug.security import check_password_hash
 
-# Inicializar tabla auth y sesión
+# inicializa auth/session
 create_user_table_if_not_exists()
 init_session()
 
-# Ruta local al ER
+# Ruta a tu ER (puedes cambiar por /mnt/data/tu_logo.png si tienes imagen)
 logo_url = "file:///mnt/data/ER proyecto - ER NUEVO.pdf"
 
-# Configuración de página
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="auto")
-# Ocultar la barra superior de Streamlit (el header donde aparece el menú)
+
+# ---------------------------
+# Ocultar header de Streamlit (si no lo quieres visible)
+# ---------------------------
 hide_streamlit_style = """
     <style>
     header {visibility: hidden;}
-    .css-18ni7ap {padding-top: 0 !important;}
+    main {padding-top: 0rem;}
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-
-# ===============================
-#      ESTILOS PREMIUM UI
-# ===============================
+# ---------------------------
+# ULTRA PREMIUM STYLES + ANIM
+# ---------------------------
 st.markdown(
     """
     <style>
-    .stApp { background: linear-gradient(135deg, #0f1724 0%, #071029 60%); color: #E6EEF8; }
-
-    .login-wrap { display:flex; justify-content:center; padding:30px 12px; }
-    .login-card { width:920px; border-radius:14px; padding:24px;
-                  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-                  border: 1px solid rgba(255,255,255,0.08);
-                  box-shadow: 0 8px 30px rgba(2,6,23,0.6); }
-
-    .login-grid { display: grid; grid-template-columns: 1fr 360px; gap: 22px; }
-
-    .brand { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
-    .brand h1 { margin:0; font-size:42px; color:#F8FAFC; }
-    .brand p { margin:0; color:#A5BBD8; font-size:14px; }
-
-    .logo-box {
-        width:74px; height:74px; border-radius:10px;
-        background: linear-gradient(135deg, #1F3A93, #5C6BC0);
-        display:flex; justify-content:center; align-items:center;
-        color:white; font-weight:700; font-size:22px;
-        box-shadow: 0 6px 18px rgba(10,20,40,0.5);
+    /* Page gradient + subtle grain */
+    .stApp {
+      background: radial-gradient(circle at 10% 10%, rgba(31,58,93,0.85), transparent 20%),
+                  radial-gradient(circle at 90% 90%, rgba(18,34,56,0.75), transparent 20%),
+                  linear-gradient(180deg,#081126 0%,#041226 100%);
+      color: #EAF2FF;
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
     }
 
-    .login-title { color:#E6EEF8; font-size:24px; margin-bottom:8px; }
-    .muted { color:#A7B8D8; font-size:13px; margin-bottom:12px; }
-
-    .btn-small {
-        background: transparent !important;
-        color:#C7D9FF !important;
-        border: 1px solid rgba(255,255,255,0.10) !important;
-        border-radius:8px !important;
-        padding:6px 10px !important;
-        font-size:12px !important;
+    /* Centering container full height */
+    .ultra-wrap {
+      min-height: calc(100vh - 10px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:48px 18px;
     }
 
-    .tiny { color:#8EA7D1; font-size:12px; margin-top:8px; }
+    /* Glass card */
+    .ultra-card {
+      width: 960px;
+      max-width: 96%;
+      border-radius: 18px;
+      padding: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.05);
+      box-shadow: 0 20px 60px rgba(2,8,23,0.65);
+      backdrop-filter: blur(8px) saturate(120%);
+      display:grid;
+      grid-template-columns: 1fr 420px;
+      gap: 28px;
+      align-items:center;
+      transform: translateY(0px);
+      transition: transform 0.45s cubic-bezier(.2,.9,.3,1);
+    }
+    .ultra-card:hover { transform: translateY(-6px); }
+
+    /* Brand */
+    .ultra-brand { display:flex; gap:16px; align-items:center; margin-bottom:6px; }
+    .ultra-logo {
+      width:84px; height:84px; border-radius:16px;
+      background: linear-gradient(135deg,#6a9cff,#3f6bd6);
+      display:flex; align-items:center; justify-content:center;
+      color:white; font-weight:800; font-size:34px;
+      box-shadow: 0 12px 30px rgba(33,78,161,0.32);
+      animation: float 4s ease-in-out infinite;
+    }
+    @keyframes float {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+      100% { transform: translateY(0); }
+    }
+    .brand-title { font-size:34px; margin:0; color:#F7FBFF; letter-spacing:0.6px; }
+    .brand-sub { margin:0; color:#9BB1D6; font-size:13px; }
+
+    /* Left (big login) */
+    .login-title { font-size:20px; color:#EAF2FF; margin: 6px 0 8px 0; }
+    .login-desc { color:#9FB4D6; font-size:13px; margin-bottom:14px; }
+
+    .input-style {
+      background: rgba(20,30,45,0.55);
+      border: 1px solid rgba(255,255,255,0.04);
+      padding: 12px 14px;
+      border-radius: 10px;
+      color: #EAF2FF;
+      width:100%;
+      box-sizing:border-box;
+      margin-bottom:12px;
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: linear-gradient(90deg,#2b7bff,#4c6bf7);
+      color:white; padding:10px 16px; border-radius:12px;
+      border:none; box-shadow: 0 12px 24px rgba(35,80,200,0.18);
+      cursor:pointer; font-weight:600;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(35,80,200,0.22); }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06);
+      color:#DDE9FF; padding:8px 12px; border-radius:10px; cursor:pointer;
+    }
+
+    /* Right (card info) */
+    .side-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius: 12px;
+      padding:18px;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    .side-title { font-size:16px; color:#EAF2FF; margin-bottom:6px; }
+    .side-text { color:#9FB4D6; font-size:13px; margin-bottom:14px; }
+
+    /* tiny footer */
+    .tiny { color:#8EA7D1; font-size:12px; margin-top:10px; display:block; }
+
+    /* responsive */
+    @media (max-width: 900px) {
+      .ultra-card { grid-template-columns: 1fr; padding:18px; }
+      .ultra-logo { width:64px; height:64px; font-size:26px; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ===============================
-#         LOGIN PREMIUM
-# ===============================
-st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
-st.markdown('<div class="login-card">', unsafe_allow_html=True)
+# ---------------------------
+# RENDER ULTRA CARD
+# ---------------------------
+st.markdown('<div class="ultra-wrap">', unsafe_allow_html=True)
+st.markdown('<div class="ultra-card">', unsafe_allow_html=True)
 
-# Branding superior
+# Brand header (left column top)
 st.markdown(
     f'''
-    <div class="brand">
-      <div class="logo-box">G</div>
-      <div>
-        <h1>GAPC — Portal</h1>
-        <p>Sistema de Gestión para Grupos de Ahorro y Préstamo Comunitarios</p>
+    <div>
+      <div class="ultra-brand">
+        <div class="ultra-logo">G</div>
+        <div>
+          <div class="brand-title">GAPC — Portal</div>
+          <div class="brand-sub">Sistema de Gestión para Grupos de Ahorro y Préstamo Comunitarios</div>
+        </div>
       </div>
-    </div>
+      <div style="margin-top:6px;">
+        <div class="login-title">Iniciar sesión</div>
+        <div class="login-desc">Accede con tu usuario y contraseña para gestionar el grupo.</div>
+      </div>
     ''',
     unsafe_allow_html=True,
 )
 
-# GRID: Login grande + Registro compacto
-st.markdown('<div class="login-grid">', unsafe_allow_html=True)
+# LEFT: Formulario (usamos streamlit para inputs pero con estilo visual)
+with st.form(key="ultra_login_form"):
+    col_username = st.text_input("", placeholder="usuario.ejemplo", key="ultra_user", label_visibility="collapsed")
+    col_password = st.text_input("", placeholder="Contraseña", type="password", key="ultra_pw", label_visibility="collapsed")
+    # Buttons row
+    cl1, cl2 = st.columns([1, 0.35])
+    with cl1:
+        submitted = st.form_submit_button("Entrar")
+    with cl2:
+        st.markdown('<button class="btn-ghost" type="button">¿Olvidaste?</button>', unsafe_allow_html=True)
 
-# -----------------------------------
-#      COLUMNA IZQUIERDA: LOGIN
-# -----------------------------------
-st.markdown('<div>', unsafe_allow_html=True)
-st.markdown('<div class="login-title">Iniciar sesión</div>', unsafe_allow_html=True)
-st.markdown('<div class="muted">Introduce tus credenciales para acceder</div>', unsafe_allow_html=True)
-
-with st.form(key="login_form_premium"):
-    username = st.text_input("Usuario", placeholder="tu.usuario", label_visibility="collapsed")
-    password = st.text_input("Contraseña", type="password", placeholder="••••••••", label_visibility="collapsed")
-
-    cols = st.columns([1, 0.35])
-    with cols[0]:
-        submit_login = st.form_submit_button("Entrar")
-    with cols[1]:
-        st.markdown('<button class="btn-small" type="button">¿Olvidaste?</button>', unsafe_allow_html=True)
-
-    if submit_login:
-        if not username or not password:
+    if submitted:
+        if not col_username or not col_password:
             st.error("Completa usuario y contraseña.")
         else:
-            u = get_user_by_username(username)
+            u = get_user_by_username(col_username)
             if not u:
-                st.error("Usuario no existe.")
-            elif check_password_hash(u["password_hash"], password):
-                st.session_state.user = {
-                    "id": u["id"],
-                    "username": u["username"],
-                    "name": u.get("full_name"),
-                    "role": u.get("role"),
-                }
-                st.success(f"Bienvenido {u.get('full_name') or u['username']}!")
-                st.experimental_rerun()
+                st.error("Usuario no encontrado.")
             else:
-                st.error("Contraseña incorrecta.")
+                if check_password_hash(u["password_hash"], col_password):
+                    st.session_state.user = {
+                        "id": u["id"],
+                        "username": u["username"],
+                        "name": u.get("full_name"),
+                        "role": u.get("role"),
+                    }
+                    st.success(f"¡Bienvenido {u.get('full_name') or u['username']}!")
+                    st.experimental_rerun()
+                else:
+                    st.error("Credenciales inválidas.")
 
+# close left column div
 st.markdown('</div>', unsafe_allow_html=True)
 
-# -----------------------------------
-#      COLUMNA DERECHA: REGISTRO
-# -----------------------------------
-st.markdown('<div>', unsafe_allow_html=True)
-st.markdown('<div class="login-title">Registrar usuario</div>', unsafe_allow_html=True)
-st.markdown('<div class="muted">Acceso restringido</div>', unsafe_allow_html=True)
+# RIGHT: side info / quick actions
+st.markdown('<div class="side-card">', unsafe_allow_html=True)
+st.markdown('<div class="side-title">Accesos rápidos</div>', unsafe_allow_html=True)
+st.markdown('<div class="side-text">Registrar nuevo usuario (acceso limitado), ver documentación y generar reportes.</div>', unsafe_allow_html=True)
 
-with st.form(key="register_small"):
-    r_user = st.text_input("Usuario (nuevo)", placeholder="nuevo.usuario", label_visibility="collapsed")
-    r_name = st.text_input("Nombre completo", placeholder="Nombre Apellido", label_visibility="collapsed")
-    r_pw = st.text_input("Contraseña", type="password", placeholder="Crear contraseña", label_visibility="collapsed")
-    r_pw2 = st.text_input("Confirmar contraseña", type="password", placeholder="Repetir contraseña", label_visibility="collapsed")
+with st.form(key="ultra_register"):
+    r_u = st.text_input("", placeholder="Nuevo usuario", key="ultra_reg_user", label_visibility="collapsed")
+    r_n = st.text_input("", placeholder="Nombre completo", key="ultra_reg_name", label_visibility="collapsed")
+    r_p = st.text_input("", placeholder="Contraseña", type="password", key="ultra_reg_pw", label_visibility="collapsed")
+    r_p2 = st.text_input("", placeholder="Confirmar contraseña", type="password", key="ultra_reg_pw2", label_visibility="collapsed")
+    rr1, rr2 = st.columns([1, 0.5])
+    with rr1:
+        reg_btn = st.form_submit_button("Registrar")
+    with rr2:
+        st.markdown('<button class="btn-ghost" type="button">Ayuda</button>', unsafe_allow_html=True)
 
-    cols = st.columns([1, 0.5])
-    with cols[0]:
-        submit_register = st.form_submit_button("Registrar")
-    with cols[1]:
-        st.markdown('<button class="btn-small" type="button">Ayuda</button>', unsafe_allow_html=True)
-
-    if submit_register:
-        if not r_user or not r_pw:
+    if reg_btn:
+        if not r_u or not r_p:
             st.error("Usuario y contraseña obligatorios.")
-        elif r_pw != r_pw2:
+        elif r_p != r_p2:
             st.error("Las contraseñas no coinciden.")
-        elif get_user_by_username(r_user):
+        elif get_user_by_username(r_u):
             st.error("Usuario ya existe.")
         else:
-            register_user(r_user, r_pw, r_name)
+            register_user(r_u, r_p, r_n)
             st.success("Usuario registrado. Inicia sesión.")
 
-# Link pequeño al ER
-st.markdown(
-    f'<div class="tiny">¿Necesitas ayuda? Mira el ER: <a href="{logo_url}" target="_blank" style="color:#CFE3FF">Ver ER</a></div>',
-    unsafe_allow_html=True,
-)
+# tiny ER link + close side
+st.markdown(f'<a class="tiny" href="{logo_url}" target="_blank" style="color:#CFE3FF">Ver ER y documentación</a>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)  # close side-card
 
-st.markdown('</div>', unsafe_allow_html=True)  # cierre col derecha
-st.markdown('</div>', unsafe_allow_html=True)  # cierre grid
-st.markdown('</div>', unsafe_allow_html=True)  # cierre card
-st.markdown('</div>', unsafe_allow_html=True)  # cierre wrap
+# close ultra-card + wrap
+st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ===============================
-#   POST LOGIN (sidebar + menú)
-# ===============================
+# ---------------------------
+# POST-LOGIN: sidebar / estado BD
+# ---------------------------
 if st.session_state.get("user"):
-
-    st.sidebar.write(f"Conectado como: **{st.session_state.user['username']}**")
-
+    st.sidebar.write(f"Conectado: **{st.session_state.user['username']}**")
     if st.sidebar.button("Cerrar sesión"):
         logout()
         st.experimental_rerun()
 
-    # Estado de la BD
     ok, msg = test_connection()
     if ok:
         st.sidebar.success("DB: conectado")
     else:
         st.sidebar.error("DB: no conectado")
 
-    # Menú
     menu = st.sidebar.radio("Navegación", ["Dashboard", "Guía visual", "Miembros", "Aportes", "Préstamos", "Reportes"])
-
     if menu == "Guía visual":
         render_guide_page()
-    elif menu == "Dashboard":
-        st.header("Dashboard")
-        st.write("KPIs pendientes de configurar…")
     else:
         st.header(menu)
-        st.write("Página aún en construcción.")
-
+        st.write("Página en construcción.")
 else:
     st.stop()
+
 
