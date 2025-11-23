@@ -23,6 +23,15 @@ logo_url = "file:///mnt/data/ER proyecto - ER NUEVO.pdf"
 
 # Configuración de página
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="auto")
+# Ocultar la barra superior de Streamlit (el header donde aparece el menú)
+hide_streamlit_style = """
+    <style>
+    header {visibility: hidden;}
+    .css-18ni7ap {padding-top: 0 !important;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 
 # ===============================
 #      ESTILOS PREMIUM UI
