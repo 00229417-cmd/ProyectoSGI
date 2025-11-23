@@ -1,20 +1,37 @@
+# app.py (fragmento para integrar la guía visual)
 import streamlit as st
 from modulos.config.conexion import test_connection
-from modulos.db.crud_miembros import obtener_miembros
+from modulos.auth.auth import init_session, create_user_table_if_not_exists, login_form, register_form, logout
 
-st.title("SGI — Proyecto Final")
+# inicializa auth table
+create_user_table_if_not_exists()
+init_session()
 
-ok, msg = test_connection()
-if ok:
-    st.success(msg)
-else:
-    st.error(msg)
+st.set_page_config(page_title="SGI GAPC", layout="wide")
+st.title("SGI — Portal")
+
+# Autenticación
+if st.session_state.get("user") is None:
+    col1, col2 = st.columns(2)
+    with col1:
+        ok = login_form()
+        if ok:
+            st.experimental_rerun()
+    with col2:
+        register_form()
     st.stop()
+else:
+    st.sidebar.write(f"Conectado: {st.session_state.user['username']}")
+    if st.sidebar.button("Cerrar sesión"):
+        logout()
+        st.experimental_rerun()
 
-menu = st.sidebar.selectbox("Menú", ["Inicio", "Miembros"])
-if menu == "Inicio":
-    st.write("Bienvenido al sistema SGI-GAPC")
-elif menu == "Miembros":
-    st.header("Listado de miembros")
-    st.write(obtener_miembros())
+# Menú principal
+menu = st.sidebar.radio("Navegación", ["Dashboard", "Guía visual", "Miembros", "Aportes", "Préstamos", "Reportes"])
+
+if menu == "Guía visual":
+    from modulos.ui_components.guide_page import render_guide_page
+    render_guide_page()
+
+# (mantén o añade los otros menús como desees)
 
