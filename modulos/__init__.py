@@ -1,2 +1,0 @@
-# inicializador de paquete modulos
-
