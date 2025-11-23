@@ -3,6 +3,7 @@ import streamlit as st
 from modulos.db.crud_users import create_user, verify_user_credentials
 
 def _render_login_form():
+    """Formulario de inicio de sesión (dentro de un st.form)"""
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Usuario", placeholder="usuario.ejemplo")
         password = st.text_input("Contraseña", type="password", placeholder="********")
@@ -15,14 +16,15 @@ def _render_login_form():
                 st.session_state["usuario"] = user.get("username")
                 st.session_state["user_role"] = user.get("role")
                 st.success(f"Bienvenido {user.get('full_name') or user.get('username')}!")
+                # recargar para que la app muestre la interfaz principal
                 st.experimental_rerun()
             else:
                 st.error("Usuario o contraseña incorrecta.")
 
-def _render_register_inside_modal():
-    # formulario igual pero pensado para mostrarse dentro de modal
-    with st.form("register_form_modal", clear_on_submit=True):
-        st.markdown("## Crear nuevo usuario")
+def _render_register_form():
+    """Formulario de registro (dentro de expander). Al registrarse hace rerun para cerrar expander"""
+    with st.form("register_form", clear_on_submit=True):
+        st.markdown("### Crear nuevo usuario")
         new_user = st.text_input("Nuevo usuario", placeholder="nuevo.usuario")
         new_name = st.text_input("Nombre completo", placeholder="Nombre Apellido")
         new_email = st.text_input("Correo (opcional)", placeholder="correo@ejemplo.com")
@@ -31,6 +33,7 @@ def _render_register_inside_modal():
         role = st.selectbox("Rol", ["user", "admin"])
         submit_reg = st.form_submit_button("Registrar")
         if submit_reg:
+            # validaciones mínimas
             if not new_user or not new_pass:
                 st.error("Usuario y contraseña son obligatorios.")
                 return
@@ -40,30 +43,34 @@ def _render_register_inside_modal():
             ok = create_user(new_user, new_pass, full_name=new_name, email=new_email, role=role)
             if ok:
                 st.success("Usuario creado correctamente.")
+                # recarga para evitar doble-submit y para que el expander aparezca cerrado
                 st.experimental_rerun()
             else:
                 st.error("No se pudo crear el usuario (¿username ya existe?).")
 
 def login_page():
-    # Layout: columna principal (login) y lado derecho vacío para mantener estética
-    col_left, col_right = st.columns([2, 1])
-    with col_left:
+    """
+    Página de login con:
+      - formulario de login (centrado)
+      - expander 'Registrar usuario' debajo (sin botón modal)
+    """
+    # columnas para centrar: columna central (2) y márgenes a los lados (1 y 1)
+    left_col, main_col, right_col = st.columns([1, 2, 1])
+
+    with main_col:
+        # login (centrado en la columna principal)
         _render_login_form()
+
         st.markdown("---")
 
-        # Intentamos usar st.modal si está disponible (versión reciente de Streamlit).
-        # Si no, usamos st.expander como fallback.
-        try:
-            # Si st.modal no existe, esto fallará y usará el except
-            if st.button("Abrir registro (modal)"):
-                with st.modal("Registrar usuario"):
-                    _render_register_inside_modal()
-        except Exception:
-            # fallback: expander
-            with st.expander("Registrar usuario"):
-                _render_register_inside_modal()
+        # expander: solo uno click para abrir/llenar/registrar
+        with st.expander("Registrar usuario", expanded=False):
+            _render_register_form()
 
-    with col_right:
-        # espacio vacío para mantener layout y no mostrar textos
+    # derecha e izquierda vacías para respetar el layout
+    with left_col:
+        st.markdown("") 
+    with right_col:
         st.markdown("")
+
 
