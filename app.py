@@ -1,9 +1,9 @@
 # app.py (entrada principal)
 import streamlit as st
-from modulos.config.conexion import test_connection, get_engine
+from modulos.config.conexion import test_connection, test_connection_verbose
 
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="expanded")
-# Inserta esto al inicio de app.py (después de imports y set_page_config)
+
 # ------------------------------
 # Fondo degradado azul (no cambia layout/controles)
 # ------------------------------
@@ -16,40 +16,65 @@ st.markdown(
         background-attachment: fixed;
     }
 
-    /* opcional: caja principal más translúcida para mejor contraste (no cambia estructura) */
+    /* opcional: caja principal translúcida */
     .main > div[role="main"] {
         backdrop-filter: blur(6px) saturate(120%);
     }
-
-    /* input, botones y tarjetas mantienen estilo de Streamlit; ajusta si quieres más */
     </style>
     """,
     unsafe_allow_html=True
 )
 
+# ------------------------------
+# Control de sesión
+# ------------------------------
 st.session_state.setdefault("session_iniciada", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
-# Si no está autenticado -> mostrar login y detener
+# Si no está autenticado, mostrar login
 if not st.session_state["session_iniciada"]:
     from modulos.login import login_page
     login_page()
     st.stop()
 
-# Si llegó hasta aquí: sesión activa
+# =====================================================
+# SIDEBAR (MENÚ Y DIAGNÓSTICO)
+# =====================================================
 with st.sidebar:
     st.title("Menú")
     opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
+
     st.divider()
+
     st.caption(f"Usuario: {st.session_state.get('usuario')}")
-    if st.button("Cerrar sesión"):
+
+    # ---------- Botón de diagnóstico DB ----------
+    if st.button("🔧 Diagnóstico DB", use_container_width=True):
+        ok_verbose, msg_verbose = test_connection_verbose()
+        if ok_verbose:
+            st.success("Base de datos conectada correctamente.")
+        else:
+            st.error("❌ Error de conexión a la BD")
+            with st.expander("Ver detalle del error técnico"):
+                st.write(msg_verbose)
+
+    # ---------- Enlace discreto al ER local ----------
+    ER_LOCAL_PATH = "/mnt/data/ER proyecto - ER NUEVO.png"
+    st.markdown(f"[📄 Ver diagrama ER]({ER_LOCAL_PATH})", unsafe_allow_html=True)
+
+    st.divider()
+
+    # Botón cerrar sesión
+    if st.button("Cerrar sesión", use_container_width=True):
         st.session_state["session_iniciada"] = False
         st.session_state["usuario"] = None
         st.session_state["user_role"] = None
         st.experimental_rerun()
 
-# Header premium
+# =====================================================
+# HEADER PREMIUM
+# =====================================================
 st.markdown("""
 <div style="display:flex;align-items:center;gap:18px">
   <div style="width:72px;height:72px;border-radius:12px;background:linear-gradient(135deg,#5b8bff,#3c67d6);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:28px;box-shadow:0 20px 40px rgba(0,0,0,0.45);">G</div>
@@ -60,14 +85,19 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Test conexion (opcional, quita en prod)
-ok, msg = test_connection()
+# =====================================================
+# TEST DE CONEXIÓN (RÁPIDO) — NO CAMBIADO
+# =====================================================
+ok = test_connection()
 if not ok:
-    st.warning(f"DB: NO CONECTADO ({msg})")
+    st.warning("DB: NO CONECTADO")
 else:
     st.success("DB conectado")
 
-# Páginas
+
+# =====================================================
+# PÁGINAS (CONTENIDO)
+# =====================================================
 if opcion == "Dashboard":
     st.header("Dashboard — Resumen operativo")
     c1, c2, c3 = st.columns(3)
@@ -96,6 +126,7 @@ elif opcion == "Caja":
 elif opcion == "Reportes":
     st.header("Reportes")
     st.info("Exportar PDF / Excel (implementar).")
+
 
 
 
