@@ -27,11 +27,7 @@ logo_url = "file:///mnt/data/ER proyecto - ER NUEVO.pdf"
 # Page config
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="auto")
 
-# -----------------------
-# DEBUG TEMPORAL (muestra URI parcial y test de conexión)
-# - Mantener solo mientras depuramos la conexión.
-# - Quitar después de que todo esté correcto.
-# -----------------------
+
 st.markdown("#### DEBUG (temporal) — información de conexión")
 db_uri = os.getenv("MYSQL_ADDON_URI") or os.getenv("DATABASE_URL") or "NO_URI"
 display = db_uri
