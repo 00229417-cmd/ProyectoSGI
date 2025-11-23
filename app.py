@@ -26,7 +26,7 @@ st.markdown(
 
     /* CONTENEDOR PRINCIPAL (AUMENTADO DE ANCHO) */
     .center-card {
-        width: min(1500px, 97%);   /* ← AQUI EL CAMBIO */
+        width: min(1500px, 97%);
         margin: 20px auto;
         padding: 28px;
         border-radius: 14px;
@@ -97,15 +97,18 @@ st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
 # ----------------------------
-# Si no está logueado -> mostrar login (no usar st.stop)
+# Mostrar login si no hay sesión
 # ----------------------------
 if not st.session_state["session_iniciada"]:
+    # muestra el login (esto puede modificar st.session_state)
     login_page()
     st.markdown("</div>", unsafe_allow_html=True)
-else:
-    # ----------------------------
-    # POST LOGIN (se ejecuta sólo si session_iniciada == True)
-    # ----------------------------
+
+# ----------------------------
+# Si después del login (en este mismo run) la sesión está iniciada,
+# renderizamos la app principal. Esto permite entrar a la primera vez.
+# ----------------------------
+if st.session_state.get("session_iniciada"):
     with st.sidebar:
         st.title("Menú")
         opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
@@ -115,16 +118,13 @@ else:
             st.session_state["session_iniciada"] = False
             st.session_state["usuario"] = None
             st.session_state["user_role"] = None
-            # aquí sí intentamos rerun para refrescar la UI
+            # intentar rerun para refrescar
             try:
                 if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
                     st.experimental_rerun()
             except Exception:
-                # JS fallback si fuera necesario
                 st.markdown(
-                    """
-                    <script>setTimeout(function(){ window.location.reload(); }, 200);</script>
-                    """,
+                    """<script>setTimeout(function(){ window.location.reload(); }, 200);</script>""",
                     unsafe_allow_html=True,
                 )
 
