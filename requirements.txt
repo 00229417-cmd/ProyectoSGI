@@ -2,4 +2,5 @@ streamlit
 sqlalchemy
 pymysql
 python-dotenv
+werkzeug
 pandas
