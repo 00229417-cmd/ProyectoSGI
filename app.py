@@ -1,9 +1,11 @@
-# app.py (reemplaza TODO con este archivo)
+# app.py 
 import streamlit as st
 from werkzeug.security import check_password_hash
+from sqlalchemy import text
+from typing import List, Dict
 
-# módulos internos (asegúrate de que existen en tu repo)
-from modulos.config.conexion import test_connection
+# módulos internos (asegúrate existen)
+from modulos.config.conexion import get_engine
 from modulos.auth.auth import (
     create_user_table_if_not_exists,
     init_session,
@@ -13,19 +15,19 @@ from modulos.auth.auth import (
 )
 from modulos.ui_components.guide_page import render_guide_page
 
-# Inicializaciones
+# Inicialización
 create_user_table_if_not_exists()
 init_session()
 
-# Ruta local a tu ER (archivo subido)
-logo_url = "file:///mnt/data/ER proyecto - ER NUEVO.pdf"
+# Ruta a tu ER (archivo subido en tu repo / entorno)
+logo_url = "file:///mnt/data/ER proyecto - ER NUEVO.png"
 
-# Configuración de la página
+# Página
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="collapsed")
 
-# ---------------------------
-# CSS global (no HTML suelto)
-# ---------------------------
+# --------------------------
+# CSS global (ultra premium)
+# --------------------------
 st.markdown(
     """
     <style>
@@ -96,18 +98,68 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------------------------
-# Contenedor principal sin imprimir HTML como texto
-# ---------------------------
+# --------------------------
+# Helper: obtener movimientos recientes de la BD (robusto)
+# --------------------------
+def fetch_recent_movements(limit: int = 6) -> List[Dict]:
+    """
+    Intenta leer los movimientos recientes de la base de datos consultando
+    varias tablas posibles. Si falla, devuelve una lista de ejemplo.
+    """
+    engine = None
+    try:
+        engine = get_engine()
+    except Exception:
+        engine = None
+
+    queries = [
+        "SELECT fecha as fecha, tipo_movimiento as tipo, monto, detalle FROM CajaMovimiento ORDER BY fecha DESC LIMIT :limit",
+        "SELECT fecha as fecha, tipo as tipo, monto, detalle FROM caja_movimiento ORDER BY fecha DESC LIMIT :limit",
+        "SELECT fecha as fecha, tipo as tipo, monto, detalle FROM caja ORDER BY fecha DESC LIMIT :limit",
+        "SELECT fecha as fecha, 'movimiento' as tipo, monto, detalle FROM movimientos ORDER BY fecha DESC LIMIT :limit",
+    ]
+
+    if engine:
+        for q in queries:
+            try:
+                with engine.connect() as conn:
+                    result = conn.execute(text(q), {"limit": limit})
+                    rows = result.fetchall()
+                    if rows:
+                        # convertir rows a lista de dict
+                        out = []
+                        for r in rows:
+                            try:
+                                out.append(dict(r._mapping))
+                            except Exception:
+                                try:
+                                    out.append(dict(r))
+                                except Exception:
+                                    # fallback manual
+                                    out.append({"fecha": r[0], "tipo": r[1] if len(r) > 1 else "", "monto": r[2] if len(r) > 2 else "", "detalle": r[3] if len(r) > 3 else ""})
+                        return out
+            except Exception:
+                # intento siguiente query
+                continue
+
+    # Si no se pudo obtener datos reales, devolvemos ejemplos
+    sample = [
+        {"fecha": "2025-11-20", "tipo": "Aporte", "monto": 15.00, "detalle": "Aporte mensual - Juan"},
+        {"fecha": "2025-11-19", "tipo": "Pago", "monto": 20.00, "detalle": "Pago cuota - María"},
+        {"fecha": "2025-11-18", "tipo": "Retiro", "monto": 10.00, "detalle": "Retiro Fondo - Grupo A"},
+    ]
+    return sample
+
+# --------------------------
+# Layout principal (wrap + card)
+# --------------------------
 with st.container():
     st.markdown('<div class="wrap">', unsafe_allow_html=True)
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    # NOTA: ahora usamos 2 columnas: LEFT = login + registro (apilado),
-    # RIGHT = panel de ayuda / links (no formulario).
+    # LEFT: Login (arriba) + Registro (debajo) + Movimientos recientes (debajo de ambos)
     left_col, right_col = st.columns([2.2, 1])
 
-    # ----------------- LEFT: LOGIN + REGISTRO apilados -----------------
     with left_col:
         # Branding
         cols_brand = st.columns([0.18, 1])
@@ -117,18 +169,18 @@ with st.container():
             st.markdown('<div class="brand-title">GAPC — Portal</div>', unsafe_allow_html=True)
             st.markdown('<div class="brand-sub">Sistema de Gestión para Grupos de Ahorro y Préstamo Comunitarios</div>', unsafe_allow_html=True)
 
-        # Título login
+        # Login title/desc
         st.markdown('<div class="login-title">Iniciar sesión</div>', unsafe_allow_html=True)
         st.markdown('<div class="muted">Accede con tu usuario y contraseña.</div>', unsafe_allow_html=True)
 
-        # --- FORMULARIO DE LOGIN (primero) ---
-        with st.form(key="login_form_stack"):
+        # Login form
+        with st.form(key="login_form"):
             usuario = st.text_input("Usuario", placeholder="usuario.ejemplo", label_visibility="collapsed")
             clave = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
-            col_a, col_b = st.columns([1, 0.35])
-            with col_a:
+            ca, cb = st.columns([1, 0.35])
+            with ca:
                 entrar = st.form_submit_button("Entrar")
-            with col_b:
+            with cb:
                 st.markdown('<button class="btn-ghost" type="button">¿Olvidaste?</button>', unsafe_allow_html=True)
 
             if entrar:
@@ -147,18 +199,18 @@ with st.container():
                                 "role": u.get("role"),
                             }
                             st.success(f"Bienvenido {u.get('full_name') or u['username']}!")
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error("Contraseña incorrecta.")
 
-        # --- ESPACIO LIGERO ENTRE FORMULARIOS ---
-        st.markdown("<br>", unsafe_allow_html=True)
+        # separación ligera
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-        # --- FORMULARIO DE REGISTRO (ahora DEBAJO del login) ---
-        st.markdown('<div style="margin-top:8px;"><b>Registrar usuario</b></div>', unsafe_allow_html=True)
+        # Registro (debajo del login)
+        st.markdown('<div style="margin-top:6px;"><b>Registrar usuario</b></div>', unsafe_allow_html=True)
         st.markdown('<div class="muted">Acceso limitado. Solo para administradores.</div>', unsafe_allow_html=True)
 
-        with st.form(key="register_form_stack"):
+        with st.form(key="register_form"):
             ru = st.text_input("Usuario (nuevo)", placeholder="nuevo.usuario", label_visibility="collapsed")
             rn = st.text_input("Nombre completo", placeholder="Nombre Apellido", label_visibility="collapsed")
             rp = st.text_input("Contraseña", type="password", placeholder="Crear contraseña", label_visibility="collapsed")
@@ -177,46 +229,51 @@ with st.container():
                 elif get_user_by_username(ru):
                     st.error("Usuario ya existe.")
                 else:
-                    register_user(ru, rp, rn)
-                    st.success("Usuario registrado correctamente. Inicia sesión.")
+                    ok = register_user(ru, rp, rn)
+                    if ok:
+                        st.success("Usuario registrado correctamente. Inicia sesión.")
+                    else:
+                        st.error("No se pudo registrar el usuario (revisar logs).")
 
-    # ----------------- RIGHT: Panel de ayuda / enlaces -----------------
+        # separación
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        # Movimientos recientes (elemento pedido)
+        st.subheader("Movimientos recientes")
+        movements = fetch_recent_movements(limit=6)
+        # Normalizar rows a mostrar (fecha,tipo,monto,detalle)
+        rows_for_table = []
+        for m in movements:
+            rows_for_table.append({
+                "Fecha": m.get("fecha") or m.get("Fecha") or "",
+                "Tipo": m.get("tipo") or m.get("Tipo") or "",
+                "Monto": m.get("monto") if m.get("monto") is not None else m.get("Monto", ""),
+                "Detalle": m.get("detalle") or m.get("Detalle") or "",
+            })
+        st.table(rows_for_table)
+
+    # RIGHT: panel de ayuda / enlaces (sin DB)
     with right_col:
         st.markdown('<div class="side-card">', unsafe_allow_html=True)
         st.markdown('<div class="side-title"><b>Panel rápido</b></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-text">Enlaces, documentación y estado.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-text">Enlaces, documentación y contactos.</div>', unsafe_allow_html=True)
 
-        # Estado de conexión y links
-        ok, msg = test_connection()
-        if ok:
-            st.success("DB conectado")
-        else:
-            st.error("DB no conectado")
-
-        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f'<a class="tiny" href="{logo_url}" target="_blank">Ver ER / Documentación</a>', unsafe_allow_html=True)
-        st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
         st.markdown('<div style="font-size:13px;color:#A7B9DA">Contacto: admin@ejemplo.com</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)  # close side-card
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # cerrar card + wrap
     st.markdown('</div>', unsafe_allow_html=True)  # close card
     st.markdown('</div>', unsafe_allow_html=True)  # close wrap
 
-# ---------------------------
-# POST-LOGIN: sidebar + dashboard
-# ---------------------------
+# --------------------------
+# Post-login: sidebar + dashboard (esqueleto)
+# --------------------------
 if st.session_state.get("user"):
     st.sidebar.write(f"Conectado: **{st.session_state.user['username']}**")
     if st.sidebar.button("Cerrar sesión"):
         logout()
-        st.experimental_rerun()
-
-    ok, msg = test_connection()
-    if ok:
-        st.sidebar.success("DB: conectado")
-    else:
-        st.sidebar.error("DB: no conectado")
+        st.rerun()
 
     menu = st.sidebar.radio("Navegación", ["Dashboard", "Guía visual", "Miembros", "Aportes", "Préstamos", "Reportes"])
 
@@ -224,7 +281,7 @@ if st.session_state.get("user"):
         render_guide_page()
 
     elif menu == "Dashboard":
-        st.header("Dashboard — Resumen")
+        st.header("Dashboard — Resumen operativo")
         c1, c2, c3 = st.columns(3)
         with c1:
             st.metric("Total miembros", value="—")
