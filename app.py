@@ -1,4 +1,4 @@
-# app.py 
+# app.py (reemplaza TODO con este archivo)
 import streamlit as st
 from werkzeug.security import check_password_hash
 
@@ -24,23 +24,20 @@ logo_url = "file:///mnt/data/ER proyecto - ER NUEVO.pdf"
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="collapsed")
 
 # ---------------------------
-# Ocultar header (barra superior) y CSS global
+# CSS global (no HTML suelto)
 # ---------------------------
 st.markdown(
     """
     <style>
-    /* ocultar header de Streamlit */
     header { visibility: hidden; }
     main { padding-top: 0rem; }
 
-    /* fondo y tipografía */
     .stApp {
       background: linear-gradient(180deg,#071528 0%, #030915 100%);
       color: #EAF2FF;
       font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
     }
 
-    /* contenedor principal (arriba de la pantalla, no centrado vertical) */
     .wrap {
       display:flex;
       justify-content:center;
@@ -48,7 +45,6 @@ st.markdown(
       margin-top: 6px;
     }
 
-    /* tarjeta principal */
     .card {
       width: 980px;
       max-width: 96%;
@@ -58,7 +54,7 @@ st.markdown(
       border: 1px solid rgba(255,255,255,0.04);
       box-shadow: 0 18px 50px rgba(0,0,0,0.45);
       display: grid;
-      grid-template-columns: 1fr 380px;
+      grid-template-columns: 1fr 340px;
       gap: 22px;
       margin-top: -26px;
       animation: fadeIn 0.6s ease-out forwards;
@@ -104,16 +100,16 @@ st.markdown(
 # Contenedor principal sin imprimir HTML como texto
 # ---------------------------
 with st.container():
-    # estructura: wrapper + card (marca visual con CSS, no contenido HTML suelto)
     st.markdown('<div class="wrap">', unsafe_allow_html=True)
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    # Usamos columnas nativas de Streamlit para el layout interno
+    # NOTA: ahora usamos 2 columnas: LEFT = login + registro (apilado),
+    # RIGHT = panel de ayuda / links (no formulario).
     left_col, right_col = st.columns([2.2, 1])
 
-    # ------------- COLUMNA IZQUIERDA: BRAND + LOGIN -------------
+    # ----------------- LEFT: LOGIN + REGISTRO apilados -----------------
     with left_col:
-        # Branding (HTML pequeño controlado con markdown)
+        # Branding
         cols_brand = st.columns([0.18, 1])
         with cols_brand[0]:
             st.markdown('<div class="logo-box">G</div>', unsafe_allow_html=True)
@@ -121,12 +117,12 @@ with st.container():
             st.markdown('<div class="brand-title">GAPC — Portal</div>', unsafe_allow_html=True)
             st.markdown('<div class="brand-sub">Sistema de Gestión para Grupos de Ahorro y Préstamo Comunitarios</div>', unsafe_allow_html=True)
 
-        # Títulos (renderizados con markdown, no con st.write)
+        # Título login
         st.markdown('<div class="login-title">Iniciar sesión</div>', unsafe_allow_html=True)
         st.markdown('<div class="muted">Accede con tu usuario y contraseña.</div>', unsafe_allow_html=True)
 
-        # Formulario de login (st.form para control)
-        with st.form(key="login_form"):
+        # --- FORMULARIO DE LOGIN (primero) ---
+        with st.form(key="login_form_stack"):
             usuario = st.text_input("Usuario", placeholder="usuario.ejemplo", label_visibility="collapsed")
             clave = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
             col_a, col_b = st.columns([1, 0.35])
@@ -155,18 +151,19 @@ with st.container():
                         else:
                             st.error("Contraseña incorrecta.")
 
-    # ------------- COLUMNA DERECHA: REGISTRO + HELP -------------
-    with right_col:
-        st.markdown('<div class="side-card">', unsafe_allow_html=True)
-        st.markdown('<div class="side-title"><b>Registrar usuario</b></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-text">Acceso limitado. Solo para administradores.</div>', unsafe_allow_html=True)
+        # --- ESPACIO LIGERO ENTRE FORMULARIOS ---
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        with st.form("register_form"):
+        # --- FORMULARIO DE REGISTRO (ahora DEBAJO del login) ---
+        st.markdown('<div style="margin-top:8px;"><b>Registrar usuario</b></div>', unsafe_allow_html=True)
+        st.markdown('<div class="muted">Acceso limitado. Solo para administradores.</div>', unsafe_allow_html=True)
+
+        with st.form(key="register_form_stack"):
             ru = st.text_input("Usuario (nuevo)", placeholder="nuevo.usuario", label_visibility="collapsed")
             rn = st.text_input("Nombre completo", placeholder="Nombre Apellido", label_visibility="collapsed")
             rp = st.text_input("Contraseña", type="password", placeholder="Crear contraseña", label_visibility="collapsed")
             rp2 = st.text_input("Confirmar contraseña", type="password", placeholder="Confirmar contraseña", label_visibility="collapsed")
-            rcol1, rcol2 = st.columns([1, 0.4])
+            rcol1, rcol2 = st.columns([1, 0.3])
             with rcol1:
                 reg_btn = st.form_submit_button("Registrar")
             with rcol2:
@@ -174,7 +171,7 @@ with st.container():
 
             if reg_btn:
                 if not ru or not rp:
-                    st.error("Usuario y contraseña son obligatorios.")
+                    st.error("Usuario y contraseña obligatorios.")
                 elif rp != rp2:
                     st.error("Las contraseñas no coinciden.")
                 elif get_user_by_username(ru):
@@ -183,15 +180,31 @@ with st.container():
                     register_user(ru, rp, rn)
                     st.success("Usuario registrado correctamente. Inicia sesión.")
 
-        # Enlace al ER (ayuda)
+    # ----------------- RIGHT: Panel de ayuda / enlaces -----------------
+    with right_col:
+        st.markdown('<div class="side-card">', unsafe_allow_html=True)
+        st.markdown('<div class="side-title"><b>Panel rápido</b></div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-text">Enlaces, documentación y estado.</div>', unsafe_allow_html=True)
+
+        # Estado de conexión y links
+        ok, msg = test_connection()
+        if ok:
+            st.success("DB conectado")
+        else:
+            st.error("DB no conectado")
+
+        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f'<a class="tiny" href="{logo_url}" target="_blank">Ver ER / Documentación</a>', unsafe_allow_html=True)
+        st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:13px;color:#A7B9DA">Contacto: admin@ejemplo.com</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)  # close side-card
 
+    # cerrar card + wrap
     st.markdown('</div>', unsafe_allow_html=True)  # close card
     st.markdown('</div>', unsafe_allow_html=True)  # close wrap
 
 # ---------------------------
-# POST-LOGIN: sidebar + dashboard básico
+# POST-LOGIN: sidebar + dashboard
 # ---------------------------
 if st.session_state.get("user"):
     st.sidebar.write(f"Conectado: **{st.session_state.user['username']}**")
@@ -232,7 +245,4 @@ if st.session_state.get("user"):
         st.write("Página en construcción.")
 else:
     st.stop()
-
-
-
 
