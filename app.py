@@ -3,6 +3,29 @@ import streamlit as st
 from modulos.config.conexion import test_connection, get_engine
 
 st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="expanded")
+# Inserta esto al inicio de app.py (después de imports y set_page_config)
+# ------------------------------
+# Fondo degradado azul (no cambia layout/controles)
+# ------------------------------
+st.markdown(
+    """
+    <style>
+    /* fondo degradado completo */
+    .stApp {
+        background: linear-gradient(180deg, #071032 0%, #0b2248 35%, #09203d 100%);
+        background-attachment: fixed;
+    }
+
+    /* opcional: caja principal más translúcida para mejor contraste (no cambia estructura) */
+    .main > div[role="main"] {
+        backdrop-filter: blur(6px) saturate(120%);
+    }
+
+    /* input, botones y tarjetas mantienen estilo de Streamlit; ajusta si quieres más */
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 st.session_state.setdefault("session_iniciada", False)
 st.session_state.setdefault("usuario", None)
