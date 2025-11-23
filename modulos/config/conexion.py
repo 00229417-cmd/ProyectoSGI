@@ -5,6 +5,8 @@ Versión mixta:
  - test_connection() -> bool
  - test_connection_verbose() -> (bool, mensaje)
  - get_engine(), get_connection() disponibles (compatibilidad)
+La función create_engine_from_env normaliza DATABASE_URL tipo "mysql://" a
+"mysql+mysqlconnector://" para evitar errores cuando un driver no está instalado.
 """
 
 import os
@@ -16,21 +18,26 @@ from sqlalchemy.exc import SQLAlchemyError
 # Opciones por defecto para el engine
 DEFAULT_ENGINE_OPTIONS = {
     "pool_pre_ping": True,
-    # "pool_size": 5, # opcional
+    # puedes añadir "pool_size": 5 si lo necesitas
 }
 
 def create_engine_from_env() -> Engine:
     """
     Construye un SQLAlchemy engine usando variables de entorno:
-      1) DATABASE_URL (formato SQLAlchemy)
-      2) MYSQL_ADDON_* (Clever Cloud)
+      1) DATABASE_URL (normaliza mysql:// -> mysql+mysqlconnector://)
+      2) MYSQL_ADDON_* (Clever Cloud style)
       3) fallback SQLite local (dev)
     """
     database_url = os.environ.get("DATABASE_URL") or os.environ.get("MYSQL_ADDON_URI")
     if database_url:
+        # --- Normalizar si viene como mysql:// (sin especificador de driver)
+        if database_url.startswith("mysql://"):
+            # forzamos mysqlconnector (si prefieres pymysql, cambia aquí)
+            database_url = database_url.replace("mysql://", "mysql+mysqlconnector://", 1)
         engine = create_engine(database_url, **DEFAULT_ENGINE_OPTIONS)
         return engine
 
+    # Si no hay DATABASE_URL, intentamos montar desde MYSQL_ADDON_*
     host = os.environ.get("MYSQL_ADDON_HOST")
     port = os.environ.get("MYSQL_ADDON_PORT", "3306")
     db = os.environ.get("MYSQL_ADDON_DB")
@@ -58,19 +65,20 @@ def get_engine() -> Engine:
     return create_engine_from_env()
 
 def get_connection():
-    """Devuelve una conexión (usar con 'with')."""
+    """Devuelve una conexión (usar con 'with'). Ejemplo:
+       with get_connection() as conn:
+           conn.execute(text("SELECT 1"))
+    """
     engine = get_engine()
     return engine.connect()
 
 def test_connection() -> bool:
     """
     Prueba simple de conexión. Devuelve True si la conexión funciona, False si no.
-    Usar cuando sólo necesites saber si hay conexión.
     """
     try:
         engine = get_engine()
         with engine.connect() as conn:
-            # consulta mínima validada por DB
             conn.execute(text("SELECT 1"))
         return True
     except Exception:
@@ -79,8 +87,7 @@ def test_connection() -> bool:
 def test_connection_verbose():
     """
     Prueba de conexión con detalle.
-    Devuelve (True, None) si OK, o (False, "mensaje de error") si falla.
-    Útil para mostrar diálogo de error en UI o logs.
+    Devuelve (True, None) si OK, o (False, "mensaje") si falla.
     """
     try:
         engine = get_engine()
@@ -88,6 +95,7 @@ def test_connection_verbose():
             conn.execute(text("SELECT 1"))
         return True, None
     except SQLAlchemyError as e:
+        # tratamos de sacar mensaje legible
         return False, str(e.__dict__.get("orig") or e)
     except Exception as e:
         return False, str(e)
@@ -99,4 +107,5 @@ def connection_info():
         return {"dialect": str(eng.dialect.name), "pool": str(type(eng.pool))}
     except Exception:
         return {"error": "no engine"}
+
 
