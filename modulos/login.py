@@ -3,7 +3,6 @@ import streamlit as st
 from modulos.db.crud_users import create_user, verify_user_credentials
 
 def _render_login_form():
-    st.markdown("<div class='form-wrapper'>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Usuario", placeholder="usuario.ejemplo")
         password = st.text_input("Contraseña", type="password", placeholder="********")
@@ -19,11 +18,11 @@ def _render_login_form():
                 st.experimental_rerun()
             else:
                 st.error("Usuario o contraseña incorrecta.")
-    st.markdown("</div>", unsafe_allow_html=True)
 
-def _render_register_form():
-    st.markdown("### Crear nuevo usuario")
-    with st.form("register_form", clear_on_submit=True):
+def _render_register_inside_modal():
+    # formulario igual pero pensado para mostrarse dentro de modal
+    with st.form("register_form_modal", clear_on_submit=True):
+        st.markdown("## Crear nuevo usuario")
         new_user = st.text_input("Nuevo usuario", placeholder="nuevo.usuario")
         new_name = st.text_input("Nombre completo", placeholder="Nombre Apellido")
         new_email = st.text_input("Correo (opcional)", placeholder="correo@ejemplo.com")
@@ -46,13 +45,25 @@ def _render_register_form():
                 st.error("No se pudo crear el usuario (¿username ya existe?).")
 
 def login_page():
-    # mostramos el login centrado (usa el card definido en app.py)
-    col_left, col_right = st.columns([2,1])
+    # Layout: columna principal (login) y lado derecho vacío para mantener estética
+    col_left, col_right = st.columns([2, 1])
     with col_left:
         _render_login_form()
-        # expander como botón de registro: aparece debajo y mantiene la estética
-        with st.expander("Registrar usuario", expanded=False):
-            _render_register_form()
+        st.markdown("---")
+
+        # Intentamos usar st.modal si está disponible (versión reciente de Streamlit).
+        # Si no, usamos st.expander como fallback.
+        try:
+            # Si st.modal no existe, esto fallará y usará el except
+            if st.button("Abrir registro (modal)"):
+                with st.modal("Registrar usuario"):
+                    _render_register_inside_modal()
+        except Exception:
+            # fallback: expander
+            with st.expander("Registrar usuario"):
+                _render_register_inside_modal()
+
     with col_right:
-        # dejamos la columna derecha limpia para mantener layout y no mostrar textos no deseados
-        st.markdown("") 
+        # espacio vacío para mantener layout y no mostrar textos
+        st.markdown("")
+
