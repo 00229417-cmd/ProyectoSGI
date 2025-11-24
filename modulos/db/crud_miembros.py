@@ -2,7 +2,7 @@
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
 
-# Números simples: devuelve engine (debe estar definido en modulos.config.conexion)
+# Guardamos engine en módulo para reusar
 _engine = None
 
 def _ensure_engine():
@@ -14,7 +14,8 @@ def _ensure_engine():
 def list_miembros(limit: int = 500):
     """
     Retorna lista de miembros como lista de dicts.
-    Intenta seleccionar columnas básicas que mencionaste.
+    Usamos .mappings() para obtener filas como mapeos (clave->valor),
+    compatible con diferentes versiones de SQLAlchemy.
     """
     engine = _ensure_engine()
     sql = text("""
@@ -31,20 +32,33 @@ def list_miembros(limit: int = 500):
     """)
     with engine.connect() as conn:
         res = conn.execute(sql, {"lim": limit})
-        rows = [dict(r) for r in res.fetchall()]
+        # RES: Result
+        try:
+            mappings = res.mappings().all()  # lista de MappingResult (dict-like)
+            rows = [dict(r) for r in mappings]
+        except Exception:
+            # Fallback: intentar convertir cada row usando _mapping o enumerar columnas
+            rows = []
+            cols = res.keys()
+            for r in res:
+                try:
+                    rows.append(dict(r._mapping))
+                except Exception:
+                    # último recurso: construir dict por posición usando columnas
+                    rows.append({cols[i]: r[i] for i in range(len(cols))})
     return rows
 
 def create_miembro(nombre: str, apellido: str, dui: str = None, direccion: str = None, id_tipo_usuario: int = None):
     """
     Inserta un miembro y retorna el id insertado.
-    Usa INSERT + SELECT LAST_INSERT_ID() (compatible MySQL/MariaDB).
+    Usa INSERT + LAST_INSERT_ID() como fallback si res.lastrowid no está disponible.
     """
     engine = _ensure_engine()
     insert_sql = text("""
         INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion)
         VALUES (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion)
     """)
-    with engine.begin() as conn:  # begin() para commit automático
+    with engine.begin() as conn:
         res = conn.execute(insert_sql, {
             "id_tipo_usuario": id_tipo_usuario,
             "nombre": nombre,
@@ -52,14 +66,17 @@ def create_miembro(nombre: str, apellido: str, dui: str = None, direccion: str =
             "dui": dui,
             "direccion": direccion
         })
-        # res.lastrowid funciona con SQLAlchemy/MySQL connectors
+        # intentamos obtener lastrowid
+        new_id = None
         try:
-            new_id = res.lastrowid
+            new_id = int(res.lastrowid)
         except Exception:
-            # Fallback estándar SQL: SELECT LAST_INSERT_ID()
-            last_sql = text("SELECT LAST_INSERT_ID() AS id")
-            r = conn.execute(last_sql).fetchone()
-            new_id = int(r["id"]) if r else None
+            try:
+                r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).fetchone()
+                new_id = int(r["id"]) if r and "id" in r else None
+            except Exception:
+                new_id = None
     return new_id
+
 
 
