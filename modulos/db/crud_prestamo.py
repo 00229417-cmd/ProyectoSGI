@@ -1,23 +1,23 @@
+
 # modulos/db/crud_prestamo.py
+from typing import Optional
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
-from datetime import datetime, date
 
-def create_prestamo(id_ciclo, id_miembro, monto, intereses, plazo_meses, id_promotora=None, fecha_solicitud=None):
+def create_prestamo(
+    id_ciclo: int,
+    id_miembro: int,
+    monto: float,
+    intereses: float,
+    plazo_meses: int,
+    id_promotora: Optional[int] = None,
+    fecha_solicitud: Optional[str] = None
+) -> Optional[int]:
     """
-    Crea un préstamo. fecha_solicitud puede ser:
-      - None  -> se inserta NULL
-      - datetime.date / datetime.datetime -> se usa directamente
-      - string 'YYYY-MM-DD' o 'YYYY-MM-DD HH:MM:SS' -> se usa tal cual
-    Retorna id del nuevo prestamo.
+    Crea un prestamo y retorna el id (id_prestamo) insertado.
+    - fecha_solicitud: string 'YYYY-MM-DD' o 'YYYY-MM-DD HH:MM:SS' o None
     """
     engine = get_engine()
-    if fecha_solicitud is None:
-        # si quieres que siempre tenga fecha, descomenta la siguiente línea:
-        # fecha_solicitud = datetime.now()
-        fecha_solicitud_val = None
-    else:
-        fecha_solicitud_val = fecha_solicitud
 
     sql = """
     INSERT INTO prestamo
@@ -25,28 +25,42 @@ def create_prestamo(id_ciclo, id_miembro, monto, intereses, plazo_meses, id_prom
     VALUES
       (:id_prom, :id_ciclo, :id_miembro, :monto, :intereses, :saldo, :estado, :plazo, :total_cuotas, :fecha_solicitud)
     """
+
     params = {
         "id_prom": id_promotora,
         "id_ciclo": id_ciclo,
         "id_miembro": id_miembro,
-        "monto": monto,
-        "intereses": intereses,
-        "saldo": monto,
+        "monto": float(monto),
+        "intereses": float(intereses),
+        "saldo": float(monto),          # al crear, saldo_restante = monto inicialmente
         "estado": "activo",
-        "plazo": plazo_meses,
+        "plazo": int(plazo_meses),
         "total_cuotas": 0,
-        "fecha_solicitud": fecha_solicitud_val
+        "fecha_solicitud": fecha_solicitud
     }
+
     try:
         with engine.begin() as conn:
             res = conn.execute(text(sql), params)
-            # Respuesta depende del driver; si no hay lastrowid, puedes SELECT MAX(id_prestamo)
+            # Intentar devolver last insert id
             try:
-                return res.lastrowid
+                last = res.lastrowid
+                return int(last) if last is not None else None
             except Exception:
-                r = conn.execute(text("SELECT LAST_INSERT_ID() as id")).fetchone()
-                return r["id"] if r else None
+                r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).fetchone()
+                if r and ("id" in r or 0 in r):
+                    return int(r["id"]) if "id" in r else int(r[0])
+                return None
     except Exception as e:
-        # lanza para que la página muestre el error real
+        # no ocultes el error: sube la excepción para que la página lo muestre
         raise RuntimeError(f"Error creando prestamo: {e}")
 
+def listar_prestamos(limit: int = 200):
+    """
+    Retorna lista de prestamos (rows) — útil para mostrar en la UI.
+    """
+    engine = get_engine()
+    sql = "SELECT * FROM prestamo ORDER BY id_prestamo DESC LIMIT :lim"
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql), {"lim": limit}).fetchall()
+    return [dict(r) for r in rows]
