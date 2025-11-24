@@ -63,7 +63,7 @@ st.markdown(
     }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(20,60,120,0.12); }
 
-    /* ancho mayor para formularios/tablas dentro de la card (mejora visual) */
+    /* ancho mayor para dataframes/tablas dentro de la card */
     .center-card .stDataFrame, .center-card .stTable {
         width: 100% !important;
     }
@@ -106,7 +106,7 @@ if not st.session_state["session_iniciada"]:
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
-    # siempre cerrar la card y detener la ejecución hasta que el usuario se loguee
+    # cerrar la card y detener la ejecución hasta que el usuario se loguee
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()  # <-- FIX definitivo: corta la ejecución aquí hasta que session_iniciada True
 
@@ -115,14 +115,32 @@ if not st.session_state["session_iniciada"]:
 # ----------------------------
 with st.sidebar:
     st.title("Menú")
-    opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
+    opcion = st.selectbox(
+        "Ir a:",
+        [
+            "Dashboard",
+            "Miembros",
+            "Aportes",
+            "Préstamos",
+            "Cuotas",
+            "Caja",
+            "Reuniones",
+            "Asistencia",
+            "Multas",
+            "Cierres",
+            "Promotoras",
+            "Ciclos",
+            "Grupos",
+            "Reportes",
+            "Configuración",
+        ],
+    )
     st.divider()
-    st.caption(f"Usuario: {st.session_state.get('usuario')}")
-    if st.button("Cerrar sesión"):
+    st.caption(f"Usuario: {st.session_state.get('usuario') or '—'}")
+    if st.button("Cerrar sesión 🔒"):
         st.session_state["session_iniciada"] = False
         st.session_state["usuario"] = None
         st.session_state["user_role"] = None
-        # intentar rerun para refrescar; si falla, recarga por JS
         try:
             if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
                 st.experimental_rerun()
@@ -138,7 +156,6 @@ else:
 
 # ----------------------------
 # Helpers para import dinámico de páginas
-# - Intentamos importar la página y una de dos nombres de función (compatibilidad)
 # ----------------------------
 def _import_and_call(module_path: str, func_names: list):
     """
@@ -158,59 +175,52 @@ def _import_and_call(module_path: str, func_names: list):
 
     raise AttributeError(f"Ninguna de las funciones {func_names} está definida en {module_path}.")
 
-
 # ----------------------------
-# Páginas (carga dinámica, mensajes claros si faltan modulos)
+# Páginas (carga dinámica)
 # ----------------------------
-if opcion == "Dashboard":
-    try:
-        # admite dos convenciones: render_dashboard() o dashboard_page()
+try:
+    if opcion == "Dashboard":
         _import_and_call("modulos.pages.dashboard_page", ["render_dashboard", "dashboard_page"])
-    except Exception as e:
-        st.info("Página 'Dashboard' (módulo modulos.pages.dashboard_page) no encontrada — mostrando placeholder.")
-        st.header("Dashboard — (placeholder)")
-        st.subheader("Actividad reciente")
-        st.table([])
-
-elif opcion == "Miembros":
-    try:
-        # admite render_miembros() o render_miembros / miembros_page / render_miembros_page
-        _import_and_call("modulos.pages.miembros_page", ["render_miembros", "miembros_page", "render_miembros_page"])
-    except Exception as e:
-        st.error("Error al cargar la página 'Miembros': revisa modulos/db/crud_miembros.py para imports circulares.")
-        st.header("Miembros — (placeholder)")
-        st.info("Aún no hay implementación completa. Aquí irá la tabla con registros / CRUD.")
-        st.table([])
-
-elif opcion == "Aportes":
-    try:
-        _import_and_call("modulos.pages.aportes_page", ["render_aportes", "aportes_page"])
-    except Exception:
-        st.header("Aportes")
-        st.info("Página 'Aportes' no encontrada. Implementar modulos/pages/aportes_page.py")
-
-elif opcion == "Préstamos":
-    try:
+    elif opcion == "Miembros":
+        _import_and_call("modulos.pages.miembros_page", ["render_miembros", "miembros_page"])
+    elif opcion == "Aportes":
+        _import_and_call("modulos.pages.ahorro_page", ["render_ahorro", "ahorro_page"])
+    elif opcion == "Préstamos":
         _import_and_call("modulos.pages.prestamos_page", ["render_prestamos", "prestamos_page"])
-    except Exception:
-        st.header("Préstamos")
-        st.info("Página 'Préstamos' no encontrada. Implementar modulos/pages/prestamos_page.py")
-
-elif opcion == "Caja":
-    try:
+    elif opcion == "Cuotas":
+        _import_and_call("modulos.pages.cuota_page", ["render_cuota", "cuota_page"])
+    elif opcion == "Caja":
         _import_and_call("modulos.pages.caja_page", ["render_caja", "caja_page"])
-    except Exception:
-        st.header("Caja")
-        st.info("Página 'Caja' no encontrada. Implementar modulos/pages/caja_page.py")
-
-elif opcion == "Reportes":
-    try:
-        _import_and_call("modulos.pages.reportes_page", ["render_reportes", "reportes_page"])
-    except Exception:
-        st.header("Reportes")
-        st.info("Página 'Reportes' no encontrada. Implementar modulos/pages/reportes_page.py")
+    elif opcion == "Reuniones":
+        _import_and_call("modulos.pages.reunion_page", ["render_reunion", "reunion_page"])
+    elif opcion == "Asistencia":
+        _import_and_call("modulos.pages.asistencia_page", ["render_asistencia", "asistencia_page"])
+    elif opcion == "Multas":
+        _import_and_call("modulos.pages.multas_page", ["render_multas", "multas_page"])
+    elif opcion == "Cierres":
+        _import_and_call("modulos.pages.cierre_page", ["render_cierre", "cierre_page"])
+    elif opcion == "Promotoras":
+        _import_and_call("modulos.pages.promotora_page", ["render_promotora", "promotora_page"])
+    elif opcion == "Ciclos":
+        _import_and_call("modulos.pages.ciclo_page", ["render_ciclo", "ciclo_page"])
+    elif opcion == "Grupos":
+        _import_and_call("modulos.pages.grupo_page", ["render_grupo", "grupo_page"])
+    elif opcion == "Reportes":
+        _import_and_call("modulos.pages.reporte_page", ["render_reporte", "reporte_page"])
+    elif opcion == "Configuración":
+        _import_and_call("modulos.pages.config_page", ["render_config", "config_page"])
+    else:
+        st.info("Opción no válida.")
+except ImportError as ie:
+    st.warning(f"Página no encontrada: {ie}")
+    st.info("Verifica que el archivo exista en modulos/pages/ y que la función render_* esté definida.")
+except AttributeError as ae:
+    st.warning(f"Función de render no encontrada en módulo: {ae}")
+except Exception as e:
+    st.error(f"Error al cargar la página: {e}")
 
 # cerrar card
 st.markdown("</div>", unsafe_allow_html=True)
+
 
 
