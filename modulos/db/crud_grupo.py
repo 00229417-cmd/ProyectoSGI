@@ -1,28 +1,18 @@
 # modulos/db/crud_grupo.py
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
-from datetime import datetime
+from typing import List
 
-def listar_grupos(limit=200):
+def list_grupos(limit:int=200) -> List[dict]:
     engine = get_engine()
+    q = text("SELECT id_grupo, nombre, descripcion FROM grupo ORDER BY id_grupo DESC LIMIT :lim")
     with engine.connect() as conn:
-        q = text("SELECT id_grupo, nombre, descripcion, fecha_creacion FROM grupo ORDER BY id_grupo DESC LIMIT :lim")
         rows = conn.execute(q, {"lim": limit}).mappings().all()
         return [dict(r) for r in rows]
 
-def crear_grupo(nombre, descripcion=None):
+def create_grupo(nombre:str, descripcion:str=None):
     engine = get_engine()
+    q = text("INSERT INTO grupo (nombre, descripcion) VALUES (:n, :d)")
     with engine.begin() as conn:
-        q = text("INSERT INTO grupo (nombre, descripcion, fecha_creacion) VALUES (:n, :d, :f)")
-        res = conn.execute(q, {"n": nombre, "d": descripcion, "f": datetime.utcnow().strftime("%Y-%m-%d")})
-        try:
-            return res.lastrowid or True
-        except Exception:
-            return True
-
-def obtener_grupo(id_grupo):
-    engine = get_engine()
-    with engine.connect() as conn:
-        q = text("SELECT * FROM grupo WHERE id_grupo = :id LIMIT 1")
-        r = conn.execute(q, {"id": id_grupo}).mappings().first()
-        return dict(r) if r else None
+        conn.execute(q, {"n": nombre, "d": descripcion})
+        return True
