@@ -3,6 +3,22 @@ import streamlit as st
 from modulos.config.conexion import get_engine
 from sqlalchemy import text
 
+def safe_rerun():
+    """
+    Intenta rerun de forma compatible con distintas versiones de Streamlit.
+    """
+    try:
+        return st.rerun()
+    except Exception:
+        try:
+            return st.experimental_rerun()
+        except Exception:
+            try:
+                st.experimental_set_query_params(_reload="1")
+            except Exception:
+                pass
+            return
+
 def _ensure_state_keys():
     st.session_state.setdefault("show_form_reunion", False)
     st.session_state.setdefault("last_reunion_created", None)
@@ -99,10 +115,11 @@ def render_reunion():
                 if new_id:
                     st.success(f"Reunión creada. ID: {new_id}")
                     st.session_state["last_reunion_created"] = new_id
-                    st.experimental_rerun()
+                    safe_rerun()
                 else:
                     st.error("No se pudo crear la reunión.")
             except Exception as e:
                 st.error(f"Error al crear reunión: {e}")
+
 
 
