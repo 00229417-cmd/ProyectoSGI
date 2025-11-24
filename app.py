@@ -1,7 +1,7 @@
 # app.py
 import streamlit as st
-from modulos.config.conexion import test_connection  # get_engine lo usan los CRUD
-from modulos.login import login_page  # solo importar, login_page maneja forms / session
+from modulos.config.conexion import test_connection  # get_engine lo usan los CRUD/páginas
+from modulos.login import login_page  # solo importamos la función de login (no circular)
 
 st.set_page_config(
     page_title="GAPC Portal",
@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 # ----------------------------
-# CSS - fondo degradado + contenedor ancho
+# CSS con paneles más anchos (mantener aspecto)
 # ----------------------------
 st.markdown(
     """
@@ -49,36 +49,30 @@ st.markdown(
     }
     .header-title { color:#fff; margin:0; font-size:28px; font-weight:700; }
     .header-sub { color:#9FB4D6; font-size:13px; margin-top:4px; }
-
-    /* Inputs animados */
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
+    .stTextInput>div>div>input {
         transition: box-shadow .18s ease, transform .18s ease;
         border-radius: 8px;
     }
-    .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus {
+    .stTextInput>div>div>input:focus {
         box-shadow: 0 8px 22px rgba(20,60,120,0.18);
         transform: translateY(-2px);
         outline: none;
     }
-
-    /* botones con micro-animacion */
     .stButton>button {
         transition: transform .12s ease, box-shadow .12s ease;
     }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(20,60,120,0.12); }
 
-    /* ancho mayor para formularios/panels internos (si quieres más ampliar) */
-    .stApp .main .block-container {
-        max-width: 1400px;
-        padding-left: 40px;
-        padding-right: 40px;
+    /* ancho mayor para dataframes/tablas dentro de la card */
+    .center-card .stDataFrame, .center-card .stTable {
+        width: 100% !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# header (tarjeta principal abierta)
+# header + open card
 st.markdown(
     """
     <div class="center-card">
@@ -94,34 +88,56 @@ st.markdown(
 )
 
 # ----------------------------
-# SESSION DEFAULTS
+# SESSIONS
 # ----------------------------
 st.session_state.setdefault("session_iniciada", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
 # ----------------------------
-# MOSTRAR LOGIN si no hay sesión
+# Mostrar login si no hay sesión
 # ----------------------------
-# login_page() debe: renderizar form, crear usuario si se solicita y, al login correcto,
-# setear st.session_state["session_iniciada"]=True y st.session_state["usuario"]=username
 if not st.session_state["session_iniciada"]:
-    # muestra el login (login_page hace set en session_state y llama a rerun si implementado)
-    login_page()
-    # cerramos la tarjeta y detenemos la ejecución hasta que inicie sesión
+    # muestra el login (login_page debe establecer st.session_state["session_iniciada"]=True al autenticar)
+    try:
+        login_page()
+    except Exception as e:
+        st.error(f"Error al cargar la pantalla de login: {e}")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
+
+    # cerrar la card y detener la ejecución hasta que el usuario se loguee
     st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()
+    st.stop()  # <-- FIX definitivo: corta la ejecución aquí hasta que session_iniciada True
 
 # ----------------------------
-# POST-LOGIN -> SIDEBAR y contenido
+# POST LOGIN
 # ----------------------------
 with st.sidebar:
     st.title("Menú")
-    opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
+    opcion = st.selectbox(
+        "Ir a:",
+        [
+            "Dashboard",
+            "Miembros",
+            "Aportes",
+            "Préstamos",
+            "Cuotas",
+            "Caja",
+            "Reuniones",
+            "Asistencia",
+            "Multas",
+            "Cierres",
+            "Promotoras",
+            "Ciclos",
+            "Grupos",
+            "Reportes",
+            "Configuración",
+        ],
+    )
     st.divider()
-    st.caption(f"👤 Usuario: {st.session_state.get('usuario') or '—'}")
-    if st.button("Cerrar sesión"):
-        # limpiar sesión y forzar recarga
+    st.caption(f"Usuario: {st.session_state.get('usuario') or '—'}")
+    if st.button("Cerrar sesión 🔒"):
         st.session_state["session_iniciada"] = False
         st.session_state["usuario"] = None
         st.session_state["user_role"] = None
@@ -129,80 +145,80 @@ with st.sidebar:
             if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
                 st.experimental_rerun()
         except Exception:
-            # fallback: reload via small JS
-            st.markdown(
-                """<script>setTimeout(function(){ window.location.reload(); }, 200);</script>""",
-                unsafe_allow_html=True,
-            )
+            st.experimental_set_query_params(_reload="1")
 
-# Test DB (solo estado, no mostrar detalles)
+# Test DB (opcional)
 ok, msg = test_connection()
-if ok:
-    st.success("✅ DB conectado")
+if not ok:
+    st.warning(f"DB: NO CONECTADO ({msg})")
 else:
-    st.warning(f"⚠️ DB: NO CONECTADO — {msg}")
+    st.success("DB conectado")
 
 # ----------------------------
-# PÁGINAS: intento de importar módulo real (modulos/pages/<page>_page.py)
-# Si no existe, muestro placeholder limpio
+# Helpers para import dinámico de páginas
 # ----------------------------
-if opcion == "Dashboard":
+def _import_and_call(module_path: str, func_names: list):
+    """
+    Importa dinamicamente module_path y llama la primera función encontrada en func_names.
+    Retorna True si se llamó la página correctamente; si no, lanza excepción.
+    """
     try:
-        from modulos.pages.dashboard_page import render_dashboard
-        render_dashboard()
-    except Exception:
-        st.info("Página 'Dashboard' (módulo modulos.pages.dashboard_page) no encontrada — mostrando placeholder.")
-        st.header("Dashboard — Resumen operativo")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total miembros", "—")
-        c2.metric("Préstamos vigentes", "—")
-        c3.metric("Saldo caja", "—")
-        st.subheader("Actividad reciente")
-        st.table([])
+        module = __import__(module_path, fromlist=["*"])
+    except Exception as e:
+        raise ImportError(f"Módulo {module_path} no encontrado: {e}") from e
 
-elif opcion == "Miembros":
-    try:
-        from modulos.pages.miembros_page import render_miembros
-        render_miembros()
-    except Exception:
-        st.error("Error al cargar la página 'Miembros' — usando placeholder.")
-        st.header("Miembros")
-        st.subheader("Lista de miembros registrados")
-        st.info("No hay miembros registrados todavía o la página no está implementada.")
-        st.table([])
+    for fname in func_names:
+        fn = getattr(module, fname, None)
+        if callable(fn):
+            fn()
+            return True
 
-elif opcion == "Aportes":
-    try:
-        from modulos.pages.aportes_page import render_aportes
-        render_aportes()
-    except Exception:
-        st.header("Aportes")
-        st.info("Registrar aportes (módulo no encontrado).")
+    raise AttributeError(f"Ninguna de las funciones {func_names} está definida en {module_path}.")
 
-elif opcion == "Préstamos":
-    try:
-        from modulos.pages.prestamos_page import render_prestamos
-        render_prestamos()
-    except Exception:
-        st.header("Préstamos")
-        st.info("Solicitudes y pagos (módulo no encontrado).")
+# ----------------------------
+# Páginas (carga dinámica)
+# ----------------------------
+try:
+    if opcion == "Dashboard":
+        _import_and_call("modulos.pages.dashboard_page", ["render_dashboard", "dashboard_page"])
+    elif opcion == "Miembros":
+        _import_and_call("modulos.pages.miembros_page", ["render_miembros", "miembros_page"])
+    elif opcion == "Aportes":
+        _import_and_call("modulos.pages.ahorro_page", ["render_ahorro", "ahorro_page"])
+    elif opcion == "Préstamos":
+        _import_and_call("modulos.pages.prestamos_page", ["render_prestamos", "prestamos_page"])
+    elif opcion == "Cuotas":
+        _import_and_call("modulos.pages.cuota_page", ["render_cuota", "cuota_page"])
+    elif opcion == "Caja":
+        _import_and_call("modulos.pages.caja_page", ["render_caja", "caja_page"])
+    elif opcion == "Reuniones":
+        _import_and_call("modulos.pages.reunion_page", ["render_reunion", "reunion_page"])
+    elif opcion == "Asistencia":
+        _import_and_call("modulos.pages.asistencia_page", ["render_asistencia", "asistencia_page"])
+    elif opcion == "Multas":
+        _import_and_call("modulos.pages.multas_page", ["render_multas", "multas_page"])
+    elif opcion == "Cierres":
+        _import_and_call("modulos.pages.cierre_page", ["render_cierre", "cierre_page"])
+    elif opcion == "Promotoras":
+        _import_and_call("modulos.pages.promotora_page", ["render_promotora", "promotora_page"])
+    elif opcion == "Ciclos":
+        _import_and_call("modulos.pages.ciclo_page", ["render_ciclo", "ciclo_page"])
+    elif opcion == "Grupos":
+        _import_and_call("modulos.pages.grupo_page", ["render_grupo", "grupo_page"])
+    elif opcion == "Reportes":
+        _import_and_call("modulos.pages.reporte_page", ["render_reporte", "reporte_page"])
+    elif opcion == "Configuración":
+        _import_and_call("modulos.pages.config_page", ["render_config", "config_page"])
+    else:
+        st.info("Opción no válida.")
+except ImportError as ie:
+    st.warning(f"Página no encontrada: {ie}")
+    st.info("Verifica que el archivo exista en modulos/pages/ y que la función render_* esté definida.")
+except AttributeError as ae:
+    st.warning(f"Función de render no encontrada en módulo: {ae}")
+except Exception as e:
+    st.error(f"Error al cargar la página: {e}")
 
-elif opcion == "Caja":
-    try:
-        from modulos.pages.caja_page import render_caja
-        render_caja()
-    except Exception:
-        st.header("Caja")
-        st.info("Movimientos de caja (módulo no encontrado).")
-
-elif opcion == "Reportes":
-    try:
-        from modulos.pages.reportes_page import render_reportes
-        render_reportes()
-    except Exception:
-        st.header("Reportes")
-        st.info("Exportar PDF / Excel (módulo no encontrado).")
-
-# cerrar tarjeta principal
+# cerrar card
 st.markdown("</div>", unsafe_allow_html=True)
 
