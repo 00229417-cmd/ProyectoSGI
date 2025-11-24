@@ -1,8 +1,36 @@
-
 # modulos/db/crud_prestamo.py
-from typing import Optional
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
+
+def listar_prestamos(limit: int = 500):
+    """
+    Retorna una lista de diccionarios: [{col: val, ...}, ...]
+    Siempre devuelve lista (puede estar vacía).
+    """
+    engine = get_engine()
+    query = text("""
+        SELECT
+            id_prestamo,
+            id_promotora,
+            id_ciclo,
+            id_miembro,
+            monto,
+            intereses,
+            saldo_restante,
+            estado,
+            plazo_meses,
+            total_cuotas,
+            fecha_solicitud
+        FROM prestamo
+        ORDER BY id_prestamo DESC
+        LIMIT :lim
+    """)
+    with engine.connect() as conn:
+        # .mappings().all() devuelve lista de RowMapping -> convertibles a dict
+        result = conn.execute(query, {"lim": limit})
+        rows = result.mappings().all()
+        # Aseguramos convertir cada RowMapping a dict simple
+        return [dict(r) for r in rows]
 
 def create_prestamo(
     id_ciclo: int,
@@ -10,57 +38,48 @@ def create_prestamo(
     monto: float,
     intereses: float,
     plazo_meses: int,
-    id_promotora: Optional[int] = None,
-    fecha_solicitud: Optional[str] = None
-) -> Optional[int]:
+    id_promotora: int | None = None,
+    fecha_solicitud: str | None = None
+):
     """
-    Crea un prestamo y retorna el id (id_prestamo) insertado.
-    - fecha_solicitud: string 'YYYY-MM-DD' o 'YYYY-MM-DD HH:MM:SS' o None
+    Inserta un préstamo y devuelve el id insertado (int) o None en caso de fallo.
     """
     engine = get_engine()
-
-    sql = """
-    INSERT INTO prestamo
-      (id_promotora, id_ciclo, id_miembro, monto, intereses, saldo_restante, estado, plazo_meses, total_cuotas, fecha_solicitud)
-    VALUES
-      (:id_prom, :id_ciclo, :id_miembro, :monto, :intereses, :saldo, :estado, :plazo, :total_cuotas, :fecha_solicitud)
-    """
-
+    insert_sql = text("""
+        INSERT INTO prestamo (
+            id_promotora,
+            id_ciclo,
+            id_miembro,
+            monto,
+            intereses,
+            saldo_restante,
+            estado,
+            plazo_meses,
+            total_cuotas,
+            fecha_solicitud
+        ) VALUES (
+            :id_promotora, :id_ciclo, :id_miembro, :monto, :intereses, :saldo_restante,
+            :estado, :plazo_meses, :total_cuotas, :fecha_solicitud
+        )
+    """)
+    # saldo_restante = monto al inicio; total_cuotas = plazo_meses (o calcular según tu lógica)
     params = {
-        "id_prom": id_promotora,
+        "id_promotora": id_promotora,
         "id_ciclo": id_ciclo,
         "id_miembro": id_miembro,
-        "monto": float(monto),
-        "intereses": float(intereses),
-        "saldo": float(monto),          # al crear, saldo_restante = monto inicialmente
-        "estado": "activo",
-        "plazo": int(plazo_meses),
-        "total_cuotas": 0,
+        "monto": monto,
+        "intereses": intereses,
+        "saldo_restante": monto,
+        "estado": "pendiente",
+        "plazo_meses": plazo_meses,
+        "total_cuotas": plazo_meses,
         "fecha_solicitud": fecha_solicitud
     }
-
-    try:
-        with engine.begin() as conn:
-            res = conn.execute(text(sql), params)
-            # Intentar devolver last insert id
-            try:
-                last = res.lastrowid
-                return int(last) if last is not None else None
-            except Exception:
-                r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).fetchone()
-                if r and ("id" in r or 0 in r):
-                    return int(r["id"]) if "id" in r else int(r[0])
-                return None
-    except Exception as e:
-        # no ocultes el error: sube la excepción para que la página lo muestre
-        raise RuntimeError(f"Error creando prestamo: {e}")
-
-def listar_prestamos(limit: int = 200):
-    """
-    Retorna lista de prestamos (rows) — útil para mostrar en la UI.
-    """
-    engine = get_engine()
-    sql = "SELECT * FROM prestamo ORDER BY id_prestamo DESC LIMIT :lim"
-    with engine.connect() as conn:
-        rows = conn.execute(text(sql), {"lim": limit}).fetchall()
-    return [dict(r) for r in rows]
+    with engine.begin() as conn:
+        res = conn.execute(insert_sql, params)
+        # Obtener LAST_INSERT_ID de MySQL/MariaDB
+        last_id = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
+        try:
+            return int(last_id)
+        except Exception:
+            return None
