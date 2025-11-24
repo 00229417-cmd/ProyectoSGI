@@ -13,8 +13,7 @@ st.set_page_config(layout="wide")
 def safe_import(module_path: str, attr: str = None):
     """
     Intenta importar un módulo o un atributo dentro del módulo.
-    Devuelve (obj, None) si se importa el módulo,
-            (attr_obj, None) si se importa el atributo,
+    Devuelve (obj, None) si se importa correctamente,
             (None, error_str) si hay error.
     """
     try:
@@ -33,28 +32,31 @@ list_ciclos, err_lc = safe_import("modulos.db.crud_ciclo", "list_ciclos")
 list_administradores, err_la = safe_import("modulos.db.crud_administrador", "list_administradores")
 
 # ---------------------------
-# UI
+# UI principal (única definición)
 # ---------------------------
 def render_reporte():
     st.markdown("# 📄 Reportes")
     st.write("Genera reportes (mora, cierre, balance).")
 
-    # Conexión con usuario en sesión
     usuario_sesion = st.session_state.get("usuario") or ""
     st.caption(f"Usuario en sesión: {usuario_sesion or '—'}")
 
-    # Obtener ciclos (si la función existe)
+    # Preparar opciones de ciclos si la función existe
     ciclos_options = []
     ciclo_selected = None
     if list_ciclos:
         try:
             ciclos = list_ciclos(limit=500) if callable(list_ciclos) else []
-            # ciclos puede ser lista de dicts o lista de tuplas; estandarizamos
             for c in ciclos:
                 if isinstance(c, dict):
-                    ciclos_options.append((int(c.get("id_ciclo")), str(c.get("fecha_inicio") or c.get("nombre") or c.get("id_ciclo"))))
+                    cid = c.get("id_ciclo") or c.get("id") or None
+                    label = c.get("fecha_inicio") or c.get("nombre") or str(cid)
+                    try:
+                        cid = int(cid) if cid is not None else None
+                    except Exception:
+                        cid = None
+                    ciclos_options.append((cid, str(label)))
                 elif isinstance(c, (list, tuple)) and len(c) >= 1:
-                    # asumimos (id, ...) o (id, desc)
                     try:
                         cid = int(c[0])
                     except Exception:
@@ -64,29 +66,24 @@ def render_reporte():
         except Exception as e:
             st.error(f"Error obteniendo ciclos: {e}")
 
-    # Convertir opciones para streamlit
-    ciclo_map = {str(cid): cid for cid, _ in ciclos_options if cid is not None}
-    ciclo_labels = [f"{cid} — {lbl}" for cid, lbl in ciclos_options]
-
-    # Formulario
+    # Construir UI del formulario
     with st.form("form_reporte"):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            tipo = st.selectbox("Tipo de reporte", ["mora", "cierre", "balance", "morosidad"], index=0)
+        left, right = st.columns([2, 1])
+        with left:
+            tipo = st.selectbox("Tipo de reporte", ["mora", "cierre", "balance", "morosidad"])
             descripcion = st.text_area("Descripción (opcional)", height=120)
-        with col2:
-            # si tenemos ciclos, mostrar select, sino entrada libre (validada)
-            if ciclo_labels:
-                sel = st.selectbox("Ciclo (opcional)", ["Ninguno"] + ciclo_labels)
+        with right:
+            # Selección de ciclo (si hay)
+            if ciclos_options:
+                labels = [f"{cid} — {lbl}" for cid, lbl in ciclos_options]
+                sel = st.selectbox("Ciclo (opcional)", ["Ninguno"] + labels)
                 if sel != "Ninguno":
-                    # extraer id antes del ' — '
                     cid_str = sel.split("—", 1)[0].strip()
                     try:
                         ciclo_selected = int(cid_str)
                     except Exception:
                         ciclo_selected = None
             else:
-                # permitir ingresar id de ciclo si se conoce
                 raw = st.text_input("ID Ciclo (opcional, numérico)")
                 try:
                     ciclo_selected = int(raw) if raw.strip() != "" else None
@@ -97,34 +94,28 @@ def render_reporte():
             submit = st.form_submit_button("Crear reporte")
 
         if submit:
-            # Validaciones simples
             id_ciclo_to_send: Optional[int] = None
             if ciclo_selected is not None:
                 try:
                     id_ciclo_to_send = int(ciclo_selected)
                 except Exception:
-                    st.warning("El ID de ciclo no es un entero válido. Se enviará NULL al crear el reporte.")
                     id_ciclo_to_send = None
+                    st.warning("ID de ciclo inválido; se enviará NULL si create_reporte lo acepta.")
 
-            # Intentar llamar a create_reporte de forma segura, detectando firma
             if create_reporte is None:
                 st.error("La función create_reporte no está disponible. Verifica modulos/db/crud_reporte.py")
             else:
                 try:
                     sig = inspect.signature(create_reporte)
                     params = sig.parameters
-                    # Construir argumentos según lo que acepte la función
                     call_kwargs = {}
-                    # posibles nombres que la función podría pedir:
-                    # ('id_ciclo','id_administrador','tipo','descripcion','estado','usuario', 'desc')
+
                     if "id_ciclo" in params:
                         call_kwargs["id_ciclo"] = id_ciclo_to_send
                     elif "ciclo_id" in params:
                         call_kwargs["ciclo_id"] = id_ciclo_to_send
 
-                    # administrador / usuario
                     if "id_administrador" in params:
-                        # si viene texto en admin_manual, tratamos de convertir a int si aplica
                         try:
                             call_kwargs["id_administrador"] = int(admin_manual) if str(admin_manual).isdigit() else admin_manual
                         except Exception:
@@ -134,30 +125,27 @@ def render_reporte():
                     elif "id_adm" in params:
                         call_kwargs["id_adm"] = admin_manual
 
-                    # tipo / tipo_reporte
                     if "tipo" in params:
                         call_kwargs["tipo"] = tipo
                     elif "tipo_reporte" in params:
                         call_kwargs["tipo_reporte"] = tipo
 
-                    # descripcion / desc
                     if "descripcion" in params:
                         call_kwargs["descripcion"] = descripcion or None
                     elif "desc" in params:
                         call_kwargs["desc"] = descripcion or None
 
-                    # Si la función solo recibe 1 posicional (por ejemplo un dict), intentar pasar un dict
-                    if len(params) == 1 and next(iter(params.values())).kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
-                        # crear payload mínimamente útil
+                    # Si la función solo espera 1 argumento posicional, le pasamos un dict
+                    only_one_param = (len(params) == 1 and next(iter(params.values())).kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD))
+                    if only_one_param:
                         payload = {
                             "id_ciclo": id_ciclo_to_send,
                             "id_administrador": admin_manual,
                             "tipo": tipo,
                             "descripcion": descripcion or None
                         }
-                        result = create_reporte(payload)  # intento posicional
+                        result = create_reporte(payload)
                     else:
-                        # intentar llamada con kwargs
                         result = create_reporte(**call_kwargs)
 
                     st.success(f"Reporte solicitado. Resultado: {result}")
@@ -166,8 +154,7 @@ def render_reporte():
                 except Exception as e:
                     st.error(f"Error creando reporte: {e}")
 
-
-    # Mostrar lista de reportes existentes (si hay list_reportes)
+    # Mostrar reportes existentes si la función existe
     st.markdown("---")
     st.subheader("Reportes recientes")
     if list_reportes is None:
@@ -180,11 +167,9 @@ def render_reporte():
             st.write("No hay reportes para mostrar.")
             return
 
-        # Estándar simple: si rows es lista de dicts mostramos dataframe
         if isinstance(rows, list) and isinstance(rows[0], dict):
             st.table(rows)
         else:
-            # intentar convertir cada fila a dict si viene como tupla
             processed = []
             for r in rows:
                 if isinstance(r, dict):
@@ -198,17 +183,16 @@ def render_reporte():
         st.error(f"Error cargando lista de reportes: {e}")
 
 
-# Exponer la función principal con un nombre común que app.py puede invocar
+# Alias seguro que app.py puede importar (un único punto de entrada)
 def render_reporte_page():
-    render_reporte()
+    return render_reporte()
 
 
-# compatibilidad con nombres alternativos que app.py pueda intentar
+# También exponer el nombre simple que tu app podría buscar
 def render_reporte():
-    render_reporte()
+    return render_reporte_page()
 
 
 if __name__ == "__main__":
-    render_reporte()
-
+    render_reporte_page()
 
