@@ -1,17 +1,29 @@
 # modulos/db/crud_ahorro.py
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
+from typing import List
 
-def obtener_saldo_miembro(id_miembro):
+def list_aportes(limit: int = 500) -> List[dict]:
     engine = get_engine()
+    q = text("""
+        SELECT id_ahorro AS id, id_miembro, id_ciclo, monto, fecha, tipo, descripcion
+        FROM ahorro
+        ORDER BY id_ahorro DESC
+        LIMIT :lim
+    """)
     with engine.connect() as conn:
-        q = text("SELECT saldo FROM ahorro WHERE id_miembro = :mid LIMIT 1")
-        r = conn.execute(q, {"mid": id_miembro}).mappings().first()
-        return r["saldo"] if r else 0.0
+        rows = conn.execute(q, {"lim": limit}).mappings().all()
+        return [dict(r) for r in rows]
 
-def actualizar_saldo(id_miembro, nuevo_saldo):
+def create_aporte(id_miembro:int, id_ciclo:int, monto:float, tipo:str="aporte", descripcion:str=None):
     engine = get_engine()
+    q = text("""
+        INSERT INTO ahorro (id_miembro, id_ciclo, monto, fecha, tipo, descripcion)
+        VALUES (:m, :c, :mo, NOW(), :t, :d)
+    """)
     with engine.begin() as conn:
-        q = text("UPDATE ahorro SET saldo = :s WHERE id_miembro = :mid")
-        res = conn.execute(q, {"s": nuevo_saldo, "mid": id_miembro})
-        return res.rowcount > 0
+        res = conn.execute(q, {"m": id_miembro, "c": id_ciclo, "mo": monto, "t": tipo, "d": descripcion})
+        try:
+            return res.lastrowid or True
+        except Exception:
+            return True
