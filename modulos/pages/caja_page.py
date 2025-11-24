@@ -1,33 +1,23 @@
 # modulos/pages/caja_page.py
 import streamlit as st
-from modulos.db.crud_caja import list_movimientos, create_movimiento
+import pandas as pd
 
 def render_caja():
-    st.header("🏦 Caja")
-    st.subheader("Movimientos")
+    st.header("🧾 Caja")
+    try:
+        from modulos.db import crud_caja
+    except Exception as e:
+        st.warning(f"CRUD caja no encontrado: {e}")
+        st.table([])
+        return
 
     try:
-        movs = list_movimientos()
+        rows = crud_caja.list_caja()
+        df = pd.DataFrame(rows) if rows else pd.DataFrame([])
     except Exception as e:
-        st.error(f"Error cargando movimientos: {e}")
-        movs = []
+        st.error(f"Error cargando caja: {e}")
+        df = pd.DataFrame([])
 
-    st.dataframe(movs, use_container_width=True)
-
-    st.markdown("---")
-    with st.expander("➕ Agregar movimiento"):
-        with st.form("form_mov", clear_on_submit=True):
-            id_ciclo = st.number_input("ID ciclo", min_value=1, value=1)
-            tipo = st.selectbox("Tipo", ["ingreso", "egreso"])
-            monto = st.number_input("Monto", min_value=0.0, format="%.2f", value=0.0)
-            detalle = st.text_input("Detalle")
-            submit = st.form_submit_button("Agregar")
-            if submit:
-                ok = create_movimiento(id_ciclo, tipo, monto, detalle)
-                if ok:
-                    st.success("Movimiento agregado ✅")
-                    st.experimental_rerun()
-                else:
-                    st.error("No se pudo agregar movimiento.")
+    st.table(df)
 
 
