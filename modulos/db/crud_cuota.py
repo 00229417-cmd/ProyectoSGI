@@ -1,21 +1,29 @@
 # modulos/db/crud_cuota.py
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
-from datetime import datetime
+from typing import List, Optional
 
-def generar_cuota(id_prestamo, numero, fecha_vencimiento, monto):
+def list_cuotas(limit:int=500) -> List[dict]:
     engine = get_engine()
-    with engine.begin() as conn:
-        q = text("INSERT INTO cuota (id_prestamo, numero, fecha_vencimiento, monto, estado) VALUES (:pid, :num, :fv, :m, 'pendiente')")
-        res = conn.execute(q, {"pid": id_prestamo, "num": numero, "fv": fecha_vencimiento, "m": monto})
-        try:
-            return res.lastrowid or True
-        except Exception:
-            return True
-
-def listar_cuotas_prestamo(id_prestamo):
-    engine = get_engine()
+    q = text("""
+        SELECT id_cuota, id_prestamo, numero_cuota, fecha_vencimiento, monto, saldo, estado
+        FROM cuota
+        ORDER BY id_cuota DESC LIMIT :lim
+    """)
     with engine.connect() as conn:
-        q = text("SELECT * FROM cuota WHERE id_prestamo = :pid ORDER BY numero ASC")
-        rows = conn.execute(q, {"pid": id_prestamo}).mappings().all()
+        rows = conn.execute(q, {"lim": limit}).mappings().all()
         return [dict(r) for r in rows]
+
+def get_cuota(id_cuota:int) -> Optional[dict]:
+    engine = get_engine()
+    q = text("SELECT * FROM cuota WHERE id_cuota = :id LIMIT 1")
+    with engine.connect() as conn:
+        r = conn.execute(q, {"id": id_cuota}).mappings().first()
+        return dict(r) if r else None
+
+def update_cuota_pay(id_cuota:int, pago:float):
+    engine = get_engine()
+    q = text("UPDATE cuota SET saldo = saldo - :p WHERE id_cuota = :id")
+    with engine.begin() as conn:
+        conn.execute(q, {"p": pago, "id": id_cuota})
+        return True
