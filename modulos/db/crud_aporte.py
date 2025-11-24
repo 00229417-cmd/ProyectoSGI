@@ -1,114 +1,24 @@
-# modulos/db/crud_miembros.py
+# modulos/db/crud_aporte.py
 from typing import List, Dict, Any, Optional
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
 
-def obtener_miembros(limit: int = 500) -> List[Dict[str, Any]]:
+def list_aportes(limit: int = 500) -> List[Dict[str, Any]]:
     """
-    Devuelve la lista de miembros con las columnas existentes.
+    Retorna lista de aportes como lista de dicts.
+    Columnas esperadas en la tabla 'aporte':
+      id_aporte, id_miembro, id_reunion, monto, fecha, tipo
     """
     sql = text("""
         SELECT
+            id_aporte,
             id_miembro,
-            id_tipo_usuario,
-            nombre,
-            apellido,
-            dui,
-            direccion
-        FROM miembro
-        ORDER BY id_miembro DESC
-        LIMIT :lim
-    """)
-    engine = get_engine()
-    with engine.connect() as conn:
-        res = conn.execute(sql, {"lim": limit})
-        rows = res.mappings().all()
-    return rows
-
-def obtener_miembro_por_id(id_miembro: int) -> Optional[Dict[str, Any]]:
-    sql = text("""
-        SELECT
-            id_miembro,
-            id_tipo_usuario,
-            nombre,
-            apellido,
-            dui,
-            direccion
-        FROM miembro
-        WHERE id_miembro = :id_miembro
-        LIMIT 1
-    """)
-    engine = get_engine()
-    with engine.connect() as conn:
-        res = conn.execute(sql, {"id_miembro": id_miembro})
-        row = res.mappings().first()
-    return row
-
-def crear_miembro(data: Dict[str, Any]) -> int:
-    """
-    Crea un miembro. `data` debe contener keys:
-      id_tipo_usuario, nombre, apellido, dui, direccion
-    Retorna el id creado (si el engine lo soporta).
-    """
-    sql = text("""
-        INSERT INTO miembro (
-            id_tipo_usuario,
-            nombre,
-            apellido,
-            dui,
-            direccion
-        ) VALUES (
-            :id_tipo_usuario,
-            :nombre,
-            :apellido,
-            :dui,
-            :direccion
-        )
-    """)
-    engine = get_engine()
-    with engine.begin() as conn:
-        res = conn.execute(sql, data)
-        # intentar obtener lastrowid (depende del driver)
-        try:
-            return int(res.lastrowid)
-        except Exception:
-            return 0
-
-def actualizar_miembro(id_miembro: int, data: Dict[str, Any]) -> bool:
-    """
-    Actualiza los campos permitidos de un miembro.
-    data puede contener: id_tipo_usuario, nombre, apellido, dui, direccion
-    """
-    sql = text("""
-        UPDATE miembro
-        SET
-            id_tipo_usuario = :id_tipo_usuario,
-            nombre = :nombre,
-            apellido = :apellido,
-            dui = :dui,
-            direccion = :direccion
-        WHERE id_miembro = :id_miembro
-    """)
-    params = dict(data)
-    params["id_miembro"] = id_miembro
-    engine = get_engine()
-    with engine.begin() as conn:
-        res = conn.execute(sql, params)
-        return res.rowcount > 0
-
-def eliminar_miembro(id_miembro: int) -> bool:
-    sql = text("DELETE FROM miembro WHERE id_miembro = :id_miembro")
-    engine = get_engine()
-    with engine.begin() as conn:
-        res = conn.execute(sql, {"id_miembro": id_miembro})
-        return res.rowcount > 0
-
-# Opcional: obtener tipos de usuario si existe la tabla tipo_usuario
-def obtener_tipos_usuario(limit: int = 200):
-    sql = text("""
-        SELECT id_tipo AS id_tipo_usuario, nombre
-        FROM tipo_usuario
-        ORDER BY id_tipo
+            id_reunion,
+            monto,
+            fecha,
+            tipo
+        FROM aporte
+        ORDER BY id_aporte DESC
         LIMIT :lim
     """)
     engine = get_engine()
@@ -117,7 +27,111 @@ def obtener_tipos_usuario(limit: int = 200):
             res = conn.execute(sql, {"lim": limit})
             return res.mappings().all()
     except Exception:
-        # si la tabla no existe o hay error, devolver lista vacía
         return []
 
+def obtener_aporte_por_id(id_aporte: int) -> Optional[Dict[str, Any]]:
+    sql = text("""
+        SELECT
+            id_aporte,
+            id_miembro,
+            id_reunion,
+            monto,
+            fecha,
+            tipo
+        FROM aporte
+        WHERE id_aporte = :id_aporte
+        LIMIT 1
+    """)
+    engine = get_engine()
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(sql, {"id_aporte": id_aporte})
+            return res.mappings().first()
+    except Exception:
+        return None
+
+def crear_aporte(data: Dict[str, Any]) -> int:
+    """
+    data debe contener: id_miembro, id_reunion, monto, fecha, tipo
+    Retorna id_insertado (int) o 0 si falla.
+    """
+    sql = text("""
+        INSERT INTO aporte (
+            id_miembro,
+            id_reunion,
+            monto,
+            fecha,
+            tipo
+        ) VALUES (
+            :id_miembro,
+            :id_reunion,
+            :monto,
+            :fecha,
+            :tipo
+        )
+    """)
+    engine = get_engine()
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(sql, data)
+            try:
+                return int(res.lastrowid)
+            except Exception:
+                return 0
+    except Exception:
+        return 0
+
+def actualizar_aporte(id_aporte: int, data: Dict[str, Any]) -> bool:
+    """
+    Actualiza un aporte por id_aporte.
+    data puede contener id_miembro, id_reunion, monto, fecha, tipo
+    """
+    sql = text("""
+        UPDATE aporte
+        SET
+            id_miembro = :id_miembro,
+            id_reunion = :id_reunion,
+            monto = :monto,
+            fecha = :fecha,
+            tipo = :tipo
+        WHERE id_aporte = :id_aporte
+    """)
+    params = dict(data)
+    params["id_aporte"] = id_aporte
+    engine = get_engine()
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(sql, params)
+            return res.rowcount > 0
+    except Exception:
+        return False
+
+def eliminar_aporte(id_aporte: int) -> bool:
+    sql = text("DELETE FROM aporte WHERE id_aporte = :id_aporte")
+    engine = get_engine()
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(sql, {"id_aporte": id_aporte})
+            return res.rowcount > 0
+    except Exception:
+        return False
+
+def list_reuniones_para_select(limit: int = 200) -> List[Dict[str, Any]]:
+    """
+    Lista mínima de reuniones para poblar selects: id_reunion, fecha, lugar.
+    Devuelve [] si la tabla no existe o falla.
+    """
+    sql = text("""
+        SELECT id_reunion, fecha, lugar
+        FROM reunion
+        ORDER BY fecha DESC
+        LIMIT :lim
+    """)
+    engine = get_engine()
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(sql, {"lim": limit})
+            return res.mappings().all()
+    except Exception:
+        return []
 
