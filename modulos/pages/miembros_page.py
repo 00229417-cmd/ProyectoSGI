@@ -1,26 +1,30 @@
 # modulos/pages/miembros_page.py
+
 import streamlit as st
-from modulos.db.crud_miembros import listar_miembros, crear_miembro
+from modulos.db.crud_miembros import list_members
 
-def mostrar_miembros():
+
+def render_miembros():
     st.header("Miembros")
-    with st.expander("Nuevo miembro"):
-        with st.form("form_nuevo_miembro"):
-            nombre = st.text_input("Nombre completo")
-            identificacion = st.text_input("Identificación")
-            telefono = st.text_input("Teléfono")
-            direccion = st.text_input("Dirección")
-            if st.form_submit_button("Crear miembro"):
-                r = crear_miembro(nombre=nombre, identificacion=identificacion, telefono=telefono, direccion=direccion)
-                if r:
-                    st.success("Miembro creado correctamente.")
-                else:
-                    st.error("Error al crear miembro.")
 
-    st.subheader("Miembros recientes")
-    rows = listar_miembros(limit=100)
-    if rows:
-        st.table(rows)
-    else:
-        st.info("No hay miembros registrados.")
+    st.markdown("### Lista de miembros registrados")
+
+    # Intentamos cargar miembros
+    try:
+        miembros = list_members()
+    except Exception as e:
+        st.error(f"Error cargando miembros: {e}")
+        return
+
+    # Si no hay registros
+    if not miembros:
+        st.info("No hay miembros registrados todavía.")
+        return
+
+    # Mostrar tabla
+    st.table(miembros)
+
+    # Mensaje final placeholder
+    st.caption("CRUD completo pronto disponible (crear, editar y eliminar).")
+
 
