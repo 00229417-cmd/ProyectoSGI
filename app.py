@@ -1,5 +1,7 @@
 # app.py
 import streamlit as st
+import importlib
+import traceback
 from modulos.config.conexion import test_connection
 from modulos.login import login_page
 
@@ -12,7 +14,8 @@ st.set_page_config(
 # =====================================================
 # CSS — respetando tu diseño original
 # =====================================================
-st.markdown("""
+st.markdown(
+    """
 <style>
 .stApp {
     min-height: 100vh;
@@ -57,13 +60,16 @@ st.markdown("""
 
 .center-card .stDataFrame, .center-card .stTable { width: 100% !important; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # -----------------------------------------------------
 # ENCABEZADO
 # -----------------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <div class="center-card">
   <div class="header-row">
     <div class="avatar-g">G</div>
@@ -72,7 +78,9 @@ st.markdown("""
       <div class="header-sub">Sistema de Gestión para Grupos de Ahorro y Préstamo Comunitarios</div>
     </div>
   </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # =====================================================
@@ -88,12 +96,14 @@ st.session_state.setdefault("user_role", None)
 # =====================================================
 if not st.session_state["session_iniciada"]:
     try:
+        # login_page debe setear st.session_state["session_iniciada"]=True y st.session_state["usuario"]
         login_page()
     except Exception as e:
         st.error(f"Error cargando login: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
+    # detener ejecución hasta que el usuario haga login
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -123,14 +133,21 @@ with st.sidebar:
     }
 
     opciones = list(ICONS.keys())
-    opcion = st.selectbox("Ir a:", opciones, format_func=lambda x: f"{ICONS[x]}  {x}")
+    # mostramos el icono + texto en el selectbox
+    opcion = st.selectbox("Ir a:", opciones, format_func=lambda x: f"{ICONS.get(x,'')}  {x}")
 
     st.divider()
     st.caption(f"Usuario: {st.session_state.get('usuario') or '—'}")
 
     if st.button("Cerrar sesión 🔒"):
+        # limpiar sesión y rerun (Streamlit 1.30+)
         st.session_state.clear()
-        st.rerun()  # reemplazo seguro del deprecated experimental_rerun
+        try:
+            st.rerun()
+        except Exception:
+            # fallback seguro
+            st.experimental_set_query_params(_logout="1")
+            st.stop()
 
 
 # =====================================================
@@ -144,44 +161,80 @@ else:
 
 
 # =====================================================
-# IMPORTADOR DINÁMICO DE PÁGINAS
+# IMPORTADOR DINÁMICO DE PÁGINAS (robusto)
 # =====================================================
-def _import_and_call(module_path, func_names):
-    module = __import__(module_path, fromlist=["*"])
-    for fn in func_names:
-        if hasattr(module, fn):
-            return getattr(module, fn)()
-    raise AttributeError(f"Ninguna de las funciones {func_names} existe en {module_path}")
+def _import_and_call(module_path: str, func_names: list):
+    """
+    Intenta importar module_path y llamar la primera función disponible en func_names.
+    Devuelve True si se ejecutó correctamente, False si hubo problema (ya mostrado).
+    """
+    try:
+        module = importlib.import_module(module_path)
+    except ModuleNotFoundError:
+        st.warning(f"Página no encontrada: {module_path} (archivo faltante).")
+        return False
+    except Exception as e:
+        st.error(f"Error importando módulo {module_path}: {e}")
+        st.text(traceback.format_exc())
+        return False
+
+    for fname in func_names:
+        fn = getattr(module, fname, None)
+        if callable(fn):
+            try:
+                fn()
+                return True
+            except Exception as e:
+                st.error(f"Error dentro de {module_path}.{fname}: {e}")
+                st.text(traceback.format_exc())
+                return False
+
+    st.info(f"El módulo {module_path} existe pero no define ninguna de: {func_names}")
+    return False
 
 
 # =====================================================
-# RUTEO DE PÁGINAS (CORREGIDO)
+# RUTEO DE PÁGINAS (con placeholders si falta)
 # =====================================================
+routes = {
+    "Dashboard": ("modulos.pages.dashboard_page", ["render_dashboard", "dashboard_page"]),
+    "Miembros": ("modulos.pages.miembros_page", ["render_miembros", "miembros_page"]),
+    "Aportes": ("modulos.pages.aportes_page", ["render_aportes", "aportes_page", "ahorro_page", "render_ahorro"]),
+    "Préstamos": ("modulos.pages.prestamos_page", ["render_prestamos", "prestamos_page"]),
+    "Cuotas": ("modulos.pages.cuota_page", ["render_cuota", "cuota_page"]),
+    "Caja": ("modulos.pages.caja_page", ["render_caja", "caja_page"]),
+    "Reuniones": ("modulos.pages.reunion_page", ["render_reunion", "reunion_page"]),
+    "Asistencia": ("modulos.pages.asistencia_page", ["render_asistencia", "asistencia_page"]),
+    "Multas": ("modulos.pages.multas_page", ["render_multas", "multas_page"]),
+    "Cierres": ("modulos.pages.cierre_page", ["render_cierre", "cierre_page"]),
+    "Promotoras": ("modulos.pages.promotora_page", ["render_promotora", "promotora_page"]),
+    "Ciclos": ("modulos.pages.ciclo_page", ["render_ciclo", "ciclo_page"]),
+    "Grupos": ("modulos.pages.grupo_page", ["render_grupo", "grupo_page"]),
+    "Reportes": ("modulos.pages.reporte_page", ["render_reporte", "reporte_page"]),
+    "Configuración": ("modulos.pages.config_page", ["render_config", "config_page"]),
+}
+
 try:
-    routes = {
-        "Dashboard": ("modulos.pages.dashboard_page", ["render_dashboard", "dashboard_page"]),
-        "Miembros": ("modulos.pages.miembros_page", ["render_miembros"]),
-        "Aportes": ("modulos.pages.aportes_page", ["render_aportes"]),
-        "Préstamos": ("modulos.pages.prestamos_page", ["render_prestamos"]),
-        "Cuotas": ("modulos.pages.cuota_page", ["render_cuota"]),
-        "Caja": ("modulos.pages.caja_page", ["render_caja"]),
-        "Reuniones": ("modulos.pages.reunion_page", ["render_reunion"]),
-        "Asistencia": ("modulos.pages.asistencia_page", ["render_asistencia"]),
-        "Multas": ("modulos.pages.multas_page", ["render_multas"]),
-        "Cierres": ("modulos.pages.cierre_page", ["render_cierre"]),
-        "Promotoras": ("modulos.pages.promotora_page", ["render_promotora"]),
-        "Ciclos": ("modulos.pages.ciclo_page", ["render_ciclo"]),
-        "Grupos": ("modulos.pages.grupo_page", ["render_grupo"]),
-        "Reportes": ("modulos.pages.reporte_page", ["render_reporte"]),
-        "Configuración": ("modulos.pages.config_page", ["render_config"]),
-    }
-
-    modulo, funciones = routes[opcion]
-    _import_and_call(modulo, funciones)
-
+    if opcion in routes:
+        modpath, fnames = routes[opcion]
+        ok_page = _import_and_call(modpath, fnames)
+        if not ok_page:
+            # placeholder amigable si la página no existe o falló
+            st.header(f"{opcion} — (placeholder)")
+            st.info(f"La página '{opcion}' aún no está disponible o falló al cargar. Verifica el archivo: {modpath.replace('.', '/')}.py")
+            # algunas páginas pueden mostrar tablas vacías o botones para avanzar
+            if opcion == "Miembros":
+                st.write("Si 'Miembros' falló pero el CRUD está listo, revisa `modulos/db/crud_miembros.py` y asegura las funciones exportadas `obtener_miembros`, `create_miembro`, etc.")
+    else:
+        st.info("Opción no válida.")
 except Exception as e:
     st.error(f"Error cargando la página: {e}")
+    st.text(traceback.format_exc())
 
 
+# =====================================================
+# CIERRE DEL CARD
+# =====================================================
 st.markdown("</div>", unsafe_allow_html=True)
+
 
