@@ -1,33 +1,41 @@
 # modulos/pages/prestamos_page.py
 import streamlit as st
-from modulos.db.crud_prestamo import list_prestamos, create_prestamo
+import pandas as pd
 
 def render_prestamos():
-    st.header("📄 Préstamos")
-    st.subheader("Lista de préstamos")
+    st.header("🏦 Préstamos")
     try:
-        prestamos = list_prestamos()
+        from modulos.db import crud_prestamo
+    except Exception as e:
+        st.warning(f"CRUD prestamo no encontrado: {e}")
+        st.table([])
+        return
+
+    try:
+        rows = crud_prestamo.list_prestamos()
+        df = pd.DataFrame(rows) if rows else pd.DataFrame([])
     except Exception as e:
         st.error(f"Error cargando préstamos: {e}")
-        prestamos = []
-    st.dataframe(prestamos, use_container_width=True)
+        df = pd.DataFrame([])
 
-    st.markdown("---")
-    with st.expander("➕ Solicitar préstamo"):
-        with st.form("form_prestamo", clear_on_submit=True):
-            id_prom = st.number_input("ID promotora", min_value=1, value=1)
-            id_ciclo = st.number_input("ID ciclo", min_value=1, value=1)
-            id_miembro = st.number_input("ID miembro", min_value=1, value=1)
-            monto = st.number_input("Monto", min_value=0.0, format="%.2f", value=100.0)
-            intereses = st.number_input("Interés (%)", min_value=0.0, format="%.2f", value=5.0)
-            plazo = st.number_input("Plazo (meses)", min_value=1, value=6)
-            submit = st.form_submit_button("Crear préstamo")
-            if submit:
-                ok = create_prestamo(id_prom, id_ciclo, id_miembro, monto, intereses, plazo)
+    st.table(df)
+
+    st.subheader("Crear préstamo")
+    with st.form("form_prestamo"):
+        id_miembro = st.number_input("ID Miembro", min_value=1, value=1)
+        monto = st.number_input("Monto", min_value=0.0, format="%.2f")
+        plazo = st.number_input("Plazo (meses)", min_value=1, value=6)
+        submitted = st.form_submit_button("Crear préstamo")
+        if submitted:
+            try:
+                ok = crud_prestamo.create_prestamo({"id_miembro": id_miembro, "monto": monto, "plazo_meses": plazo})
                 if ok:
-                    st.success("Préstamo registrado ✅")
+                    st.success("Préstamo creado.")
                     st.experimental_rerun()
                 else:
-                    st.error("No se pudo registrar el préstamo.")
+                    st.error("No se pudo crear el préstamo.")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
 
 
