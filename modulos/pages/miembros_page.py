@@ -1,46 +1,62 @@
 # modulos/pages/miembros_page.py
 import streamlit as st
-import pandas as pd
+from modulos.db.crud_miembros import list_miembros, create_miembro
+
+ICON = "👥"
 
 def render_miembros():
-    st.header("👥 Miembros")
+    st.markdown(f"## {ICON} Miembros")
+    # Mensaje de carga
     try:
-        from modulos.db import crud_miembros
-    except Exception as e:
-        st.warning(f"CRUD de miembros no encontrado: {e}")
-        st.info("Crea modulos/db/crud_miembros.py con funciones: list_miembros(), create_miembro(data), update_miembro(id, data), delete_miembro(id)")
-        st.table([])
-        return
-
-    # LISTADO
-    try:
-        rows = crud_miembros.list_miembros(limit=500)
-        df = pd.DataFrame(rows) if rows is not None else pd.DataFrame([])
+        miembros = list_miembros(500)
     except Exception as e:
         st.error(f"Error cargando miembros: {e}")
-        df = pd.DataFrame([])
+        miembros = []
 
     st.subheader("Listado")
-    st.table(df)
+    if miembros:
+        # mostrar tabla con st.dataframe para copiar/pegar
+        st.dataframe(miembros, use_container_width=True)
+    else:
+        st.info("No hay miembros registrados todavía.")
 
-    st.subheader("Crear nuevo miembro")
-    with st.form("form_create_miembro"):
-        nombre = st.text_input("Nombre")
-        apellido = st.text_input("Apellido")
-        dui = st.text_input("DUI")
-        direccion = st.text_input("Dirección")
-        submitted = st.form_submit_button("Crear")
-        if submitted:
-            try:
-                datos = {"nombre": nombre, "apellido": apellido, "dui": dui, "direccion": direccion}
-                ok = crud_miembros.create_miembro(datos)
+    st.markdown("---")
+
+    # Botón para mostrar/ocultar formulario de creación
+    if "show_new_miembro" not in st.session_state:
+        st.session_state["show_new_miembro"] = False
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("➕ Crear nuevo miembro"):
+            st.session_state["show_new_miembro"] = not st.session_state["show_new_miembro"]
+
+    with col2:
+        st.write("")  # espacio
+
+    if st.session_state["show_new_miembro"]:
+        st.markdown("### Crear nuevo miembro")
+        with st.form("form_crear_miembro", clear_on_submit=False):
+            id_tipo_usuario = st.number_input("ID tipo usuario (opcional)", min_value=0, value=0, step=1)
+            nombre = st.text_input("Nombre")
+            apellido = st.text_input("Apellido")
+            dui = st.text_input("DUI")
+            direccion = st.text_input("Dirección")
+            submitted = st.form_submit_button("Guardar miembro")
+            if submitted:
+                # normalizar valor opcional
+                id_tipo_val = id_tipo_usuario if id_tipo_usuario and id_tipo_usuario > 0 else None
+                ok, msg = create_miembro(id_tipo_val, nombre.strip(), apellido.strip(), dui.strip(), direccion.strip())
                 if ok:
-                    st.success("Miembro creado.")
-                    st.experimental_rerun()
+                    st.success(msg)
+                    st.session_state["show_new_miembro"] = False
+                    # recargar para ver el miembro en la tabla
+                    try:
+                        st.experimental_rerun()
+                    except Exception:
+                        st.info("Recarga manual necesaria para ver cambios.")
                 else:
-                    st.error("No se pudo crear el miembro.")
-            except Exception as e:
-                st.error(f"Error al crear miembro: {e}")
+                    st.error(msg)
 
 
 
