@@ -1,55 +1,65 @@
 # modulos/db/crud_miembros.py
-from typing import List, Dict, Tuple, Optional
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
 
-def _fetchall_as_dicts(result_proxy) -> List[Dict]:
-    rows = result_proxy.fetchall()
-    keys = result_proxy.keys()
-    return [dict(zip(keys, row)) for row in rows]
+# Números simples: devuelve engine (debe estar definido en modulos.config.conexion)
+_engine = None
 
-def list_miembros(limit: int = 500) -> Tuple[bool, List[Dict], Optional[str]]:
-    """
-    Devuelve (ok, rows, msg). rows es lista de dicts con columnas de la tabla `miembro`.
-    """
-    try:
-        engine = get_engine()
-        with engine.connect() as conn:
-            # Ajusta columnas si tu tabla tiene nombres diferentes; esta consulta asume la estructura mínima
-            q = text("SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion FROM miembro ORDER BY id_miembro DESC LIMIT :lim")
-            res = conn.execute(q, {"lim": limit})
-            rows = _fetchall_as_dicts(res)
-        return True, rows, None
-    except Exception as e:
-        return False, [], str(e)
+def _ensure_engine():
+    global _engine
+    if _engine is None:
+        _engine = get_engine()
+    return _engine
 
-def create_miembro(nombre: str, apellido: str, dui: str = None, direccion: str = None, id_tipo_usuario: int = None) -> Tuple[bool, Optional[int], Optional[str]]:
+def list_miembros(limit: int = 500):
     """
-    Inserta un miembro y devuelve (ok, new_id, msg)
+    Retorna lista de miembros como lista de dicts.
+    Intenta seleccionar columnas básicas que mencionaste.
     """
-    try:
-        engine = get_engine()
-        with engine.begin() as conn:
-            q = text("""
-                INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion)
-                VALUES (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion)
-            """)
-            res = conn.execute(q, {
-                "id_tipo_usuario": id_tipo_usuario,
-                "nombre": nombre,
-                "apellido": apellido,
-                "dui": dui,
-                "direccion": direccion
-            })
-            # res.lastrowid puede variar; con SQLAlchemy 1.4 res.inserted_primary_key
-            try:
-                new_id = res.lastrowid
-            except Exception:
-                new_id = None
-        return True, new_id, None
-    except Exception as e:
-        return False, None, str(e)
+    engine = _ensure_engine()
+    sql = text("""
+        SELECT
+            id_miembro,
+            id_tipo_usuario,
+            nombre,
+            apellido,
+            dui,
+            direccion
+        FROM miembro
+        ORDER BY id_miembro DESC
+        LIMIT :lim
+    """)
+    with engine.connect() as conn:
+        res = conn.execute(sql, {"lim": limit})
+        rows = [dict(r) for r in res.fetchall()]
+    return rows
 
-
+def create_miembro(nombre: str, apellido: str, dui: str = None, direccion: str = None, id_tipo_usuario: int = None):
+    """
+    Inserta un miembro y retorna el id insertado.
+    Usa INSERT + SELECT LAST_INSERT_ID() (compatible MySQL/MariaDB).
+    """
+    engine = _ensure_engine()
+    insert_sql = text("""
+        INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion)
+        VALUES (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion)
+    """)
+    with engine.begin() as conn:  # begin() para commit automático
+        res = conn.execute(insert_sql, {
+            "id_tipo_usuario": id_tipo_usuario,
+            "nombre": nombre,
+            "apellido": apellido,
+            "dui": dui,
+            "direccion": direccion
+        })
+        # res.lastrowid funciona con SQLAlchemy/MySQL connectors
+        try:
+            new_id = res.lastrowid
+        except Exception:
+            # Fallback estándar SQL: SELECT LAST_INSERT_ID()
+            last_sql = text("SELECT LAST_INSERT_ID() AS id")
+            r = conn.execute(last_sql).fetchone()
+            new_id = int(r["id"]) if r else None
+    return new_id
 
 
