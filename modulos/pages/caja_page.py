@@ -2,6 +2,23 @@
 import streamlit as st
 from modulos.db.crud_caja import list_caja, create_caja
 
+def safe_rerun():
+    """
+    Intenta rerun de forma compatible con distintas versiones de Streamlit.
+    """
+    try:
+        return st.rerun()
+    except Exception:
+        try:
+            return st.experimental_rerun()
+        except Exception:
+            # fallback ligero: fuerza recarga mediante query params
+            try:
+                st.experimental_set_query_params(_reload="1")
+            except Exception:
+                pass
+            return
+
 def _ensure_state_keys():
     st.session_state.setdefault("show_form_caja", False)
     st.session_state.setdefault("last_caja_created", None)
@@ -61,11 +78,10 @@ def render_caja():
                 if new_id:
                     st.success(f"Movimiento registrado. ID: {new_id}")
                     st.session_state["last_caja_created"] = new_id
-                    st.experimental_rerun()
+                    safe_rerun()
                 else:
                     st.error("No se pudo registrar el movimiento.")
             except Exception as e:
                 st.error(f"Error guardando movimiento: {e}")
-
 
 
