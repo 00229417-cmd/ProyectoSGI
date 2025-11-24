@@ -1,12 +1,7 @@
-# app.py (pegar reemplazando el archivo actual)
+# app.py
 import streamlit as st
-from importlib import import_module
-
-# tu conexión / helpers
-from modulos.config.conexion import test_connection
-
-# página de login (debe existir)
-from modulos.login import login_page
+from modulos.config.conexion import test_connection  # deja get_engine para los CRUD
+from modulos.login import login_page  # login_page solo se importa (no circular)
 
 st.set_page_config(
     page_title="GAPC Portal",
@@ -15,7 +10,7 @@ st.set_page_config(
 )
 
 # ----------------------------
-# CSS con paneles más anchos + micro-animaciones
+# CSS con paneles más anchos (mantener aspecto)
 # ----------------------------
 st.markdown(
     """
@@ -67,17 +62,12 @@ st.markdown(
         transition: transform .12s ease, box-shadow .12s ease;
     }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(20,60,120,0.12); }
-
-    /* ancho mayor para formularios dentro del card */
-    .block-container .stForm {
-        max-width: 900px;
-    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# header + card container abierto
+# header + open card
 st.markdown(
     """
     <div class="center-card">
@@ -100,102 +90,76 @@ st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
 # ----------------------------
-# Mostrar login si no hay sesión (detiene ejecución)
+# Mostrar login si no hay sesión
 # ----------------------------
 if not st.session_state["session_iniciada"]:
-    login_page()                     # el login debe modificar st.session_state["session_iniciada"]
+    # muestra el login (esto puede modificar st.session_state)
+    login_page()
     st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()                         # <- fix definitivo: corta aquí cuando no hay sesión
+    st.stop()  # <-- FIX definitivo: corta la ejecución aquí hasta que session_iniciada True
 
 # ----------------------------
-# Si llegamos hasta aquí la sesión está iniciada -> render app
+# POST LOGIN
 # ----------------------------
 with st.sidebar:
     st.title("Menú")
-    opcion = st.selectbox(
-        "Ir a:",
-        ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"]
-    )
+    opcion = st.selectbox("Ir a:", ["Dashboard", "Miembros", "Aportes", "Préstamos", "Caja", "Reportes"])
     st.divider()
     st.caption(f"Usuario: {st.session_state.get('usuario')}")
     if st.button("Cerrar sesión"):
         st.session_state["session_iniciada"] = False
         st.session_state["usuario"] = None
         st.session_state["user_role"] = None
-        # forzar recarga para limpiar estado UI
+        # intentar rerun para refrescar
         try:
             if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
                 st.experimental_rerun()
         except Exception:
-            # fallback: pequeña redirección JS
-            st.markdown(
-                """<script>setTimeout(function(){ window.location.reload(); }, 150);</script>""",
-                unsafe_allow_html=True,
-            )
+            st.experimental_set_query_params(_reload="1")  # fallback ligero
 
-# Test de conexión (opcional)
+# Test DB (opcional)
 ok, msg = test_connection()
 if not ok:
     st.warning(f"DB: NO CONECTADO ({msg})")
 else:
     st.success("DB conectado")
 
-# ----------------------------
-# RUTEO DE PÁGINAS (intenta importar módulo en modulos.pages)
-# cada módulo recomendado: modulos/pages/<name>_page.py
-# Debe exponer una función `render()` (preferible) o `run()`.
-# ----------------------------
-def run_page(module_name: str, fallback_title: str):
-    """
-    intenta importar modulos.pages.<module_name> y ejecutar render()/run().
-    si falla, muestra un placeholder simple (tabla vacía).
-    """
-    full_module = f"modulos.pages.{module_name}_page"
-    try:
-        mod = import_module(full_module)
-        # preferimos render(); si no existe, try run()
-        if hasattr(mod, "render") and callable(mod.render):
-            mod.render()
-            return True
-        elif hasattr(mod, "run") and callable(mod.run):
-            mod.run()
-            return True
-        else:
-            st.warning(f"El módulo {full_module} no expone render() ni run().")
-    except ModuleNotFoundError:
-        st.info(f"Página '{fallback_title}' (módulo {full_module}) no encontrada — mostrando placeholder.")
-    except Exception as e:
-        st.error(f"Error al cargar la página '{fallback_title}': {e}")
-
-    # placeholder: tabla vacía y mensaje
-    st.header(f"{fallback_title} — (placeholder)")
-    st.write("Aún no hay implementación completa. Aquí irá la tabla con registros / CRUD.")
-    st.dataframe([], use_container_width=True)
-    return False
-
-# ----------------------------
-# Ejecutar página según selección
-# ----------------------------
+# Páginas (llaman a módulos/pages/* si existen)
 if opcion == "Dashboard":
-    # intento de cargar modulos.pages.dashboard_page.render()
-    run_page("dashboard", "Dashboard")
+    try:
+        from modulos.pages.dashboard_page import render_dashboard
+        render_dashboard()
+    except Exception:
+        st.info("Página 'Dashboard' (módulo modulos.pages.dashboard_page) no encontrada — mostrando placeholder.")
+        st.header("Dashboard — (placeholder)")
+        st.subheader("Actividad reciente")
+        st.table([])
 
 elif opcion == "Miembros":
-    run_page("miembros", "Miembros")
+    try:
+        from modulos.pages.miembros_page import render_miembros
+        render_miembros()
+    except Exception:
+        st.error("Error al cargar la página 'Miembros': revisa modulos/db/crud_miembros.py para imports circulares.")
+        st.header("Miembros — (placeholder)")
+        st.info("Aún no hay implementación completa. Aquí irá la tabla con registros / CRUD.")
+        st.table([])
 
 elif opcion == "Aportes":
-    run_page("aportes", "Aportes")
+    st.header("Aportes")
+    st.info("Registrar aportes (implementar).")
 
 elif opcion == "Préstamos":
-    run_page("prestamos", "Préstamos")
+    st.header("Préstamos")
+    st.info("Solicitudes y pagos (implementar).")
 
 elif opcion == "Caja":
-    run_page("caja", "Caja")
+    st.header("Caja")
+    st.info("Movimientos de caja (implementar).")
 
 elif opcion == "Reportes":
-    run_page("reportes", "Reportes")
+    st.header("Reportes")
+    st.info("Exportar PDF / Excel (implementar).")
 
-# cerrar card
 st.markdown("</div>", unsafe_allow_html=True)
-
 
