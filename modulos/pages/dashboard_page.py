@@ -8,11 +8,7 @@ def render_dashboard():
     st.markdown("### 📊 Dashboard — Resumen operativo")
 
     ok, msg = test_connection()
-    if not ok:
-        st.warning(f"DB: NO CONECTADO ({msg})")
-        return
-    else:
-        st.success("DB conectado")
+   
 
     engine = get_engine()
 
