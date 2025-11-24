@@ -1,64 +1,74 @@
-# modulos/pages/prestamos_page.py
-import streamlit as st
-from datetime import date, datetime
-from modulos.db import crud_prestamo
+# modulos/db/crud_prestamo.py
+from typing import Optional
+from sqlalchemy import text
+from modulos.config.conexion import get_engine
 
-def render_prestamos():
-    st.title("Crear préstamo")
+def create_prestamo(
+    id_ciclo: int,
+    id_miembro: int,
+    monto: float,
+    intereses: float,
+    plazo_meses: int,
+    id_promotora: Optional[int] = None,
+    fecha_solicitud: Optional[str] = None
+) -> Optional[int]:
+    """
+    Crea un préstamo y retorna el id insertado.
+    """
+    engine = get_engine()
 
-    with st.form("form_crear_prestamo", clear_on_submit=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            id_ciclo = st.number_input("ID Ciclo", min_value=0, step=1, value=1)
-            id_miembro = st.number_input("ID Miembro", min_value=1, step=1, value=1)
-            id_promotora = st.number_input("ID Promotora (opcional)", min_value=0, step=1, value=0)
-        with col2:
-            monto = st.number_input("Monto", min_value=0.0, value=1000.0, format="%.2f")
-            intereses = st.number_input("Intereses (%)", min_value=0.0, value=10.0, format="%.2f")
-            plazo_meses = st.number_input("Plazo (meses)", min_value=1, step=1, value=6)
+    sql = """
+    INSERT INTO prestamo
+      (id_promotora, id_ciclo, id_miembro, monto, intereses, saldo_restante, estado, plazo_meses, total_cuotas, fecha_solicitud)
+    VALUES
+      (:id_prom, :id_ciclo, :id_miembro, :monto, :intereses, :saldo, :estado, :plazo, :total_cuotas, :fecha_solicitud)
+    """
 
-        st.markdown("---")
-        # Fecha opcional: si el usuario marca la casilla, mostramos date_input
-        usar_fecha = st.checkbox("Especificar fecha de solicitud (opcional)", value=False)
-        fecha_solicitud_val = None
-        if usar_fecha:
-            # streamlit en algunas versiones no acepta None como default -> ponemos today
-            f_date = st.date_input("Fecha de solicitud", value=date.today())
-            # convertir a string 'YYYY-MM-DD' (DB acepta DATETIME/DATE)
-            # si además quieres hora, podrías usar datetime.now() o un time input
-            fecha_solicitud_val = f_date.isoformat()
+    params = {
+        "id_prom": id_promotora,
+        "id_ciclo": id_ciclo,
+        "id_miembro": id_miembro,
+        "monto": float(monto),
+        "intereses": float(intereses),
+        "saldo": float(monto),
+        "estado": "activo",
+        "plazo": int(plazo_meses),
+        "total_cuotas": 0,
+        "fecha_solicitud": fecha_solicitud
+    }
 
-        submitted = st.form_submit_button("Crear préstamo")
-
-    if submitted:
-        try:
-            prom = int(id_promotora) if id_promotora and id_promotora > 0 else None
-            prest_id = crud_prestamo.create_prestamo(
-                id_ciclo=int(id_ciclo),
-                id_miembro=int(id_miembro),
-                monto=float(monto),
-                intereses=float(intereses),
-                plazo_meses=int(plazo_meses),
-                id_promotora=prom,
-                fecha_solicitud=fecha_solicitud_val
-            )
-            if prest_id:
-                st.success(f"Préstamo creado. id = {prest_id}")
-            else:
-                st.success("Préstamo creado (id no retornado por el driver). Verifica en la BD.")
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-    st.markdown("---")
-    st.header("Últimos préstamos")
     try:
-        prestamos = crud_prestamo.listar_prestamos(limit=50)
-        if prestamos:
-            st.dataframe(prestamos)
-        else:
-            st.info("No se encontraron préstamos.")
+        with engine.begin() as conn:
+            res = conn.execute(text(sql), params)
+            # Intentos robustos para obtener last insert id
+            try:
+                last = res.lastrowid
+                if last:
+                    return int(last)
+            except Exception:
+                pass
+            # Fallback
+            r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).mappings().first()
+            if r and "id" in r:
+                return int(r["id"])
+            return None
     except Exception as e:
-        st.error(f"Error cargando préstamos: {e}")
+        raise RuntimeError(f"Error creando prestamo: {e}")
+
+
+def listar_prestamos(limit: int = 200):
+    """
+    Retorna lista de prestamos (como lista de dicts).
+    Usa .mappings() para obtener MappingResult (diccionarios).
+    """
+    engine = get_engine()
+    sql = "SELECT * FROM prestamo ORDER BY id_prestamo DESC LIMIT :lim"
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql), {"lim": limit}).mappings().all()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        raise RuntimeError(f"Error listando préstamos: {e}")
 
 
 
