@@ -1,16 +1,18 @@
 # modulos/db/crud_reporte.py
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
+from typing import List
 
-def reporte_resumen_operativo():
+def list_reportes(limit:int=200) -> List[dict]:
     engine = get_engine()
+    q = text("SELECT id_reporte, tipo, fecha, usuario, descripcion FROM reporte ORDER BY id_reporte DESC LIMIT :lim")
     with engine.connect() as conn:
-        # ejemplo: totales rápidos
-        q1 = text("SELECT COUNT(*) as total_miembros FROM miembro")
-        q2 = text("SELECT COUNT(*) as prestamos_vigentes FROM prestamo WHERE estado <> 'cancelado'")
-        r1 = conn.execute(q1).mappings().first()
-        r2 = conn.execute(q2).mappings().first()
-        return {
-            "total_miembros": int(r1["total_miembros"]) if r1 else 0,
-            "prestamos_vigentes": int(r2["prestamos_vigentes"]) if r2 else 0
-        }
+        rows = conn.execute(q, {"lim": limit}).mappings().all()
+        return [dict(r) for r in rows]
+
+def create_reporte(tipo:str, usuario:str, descripcion:str=None):
+    engine = get_engine()
+    q = text("INSERT INTO reporte (tipo, fecha, usuario, descripcion) VALUES (:t, NOW(), :u, :d)")
+    with engine.begin() as conn:
+        conn.execute(q, {"t": tipo, "u": usuario, "d": descripcion})
+        return True
