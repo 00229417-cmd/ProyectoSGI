@@ -1,16 +1,14 @@
 # app.py
 import streamlit as st
-from modulos.config.conexion import test_connection  # get_engine lo usan los CRUD/páginas
-from modulos.login import login_page  # solo importamos la función de login (no circular)
+import pandas as pd
+from sqlalchemy import text
+from modulos.config.conexion import test_connection, get_engine
+from modulos.login import login_page
 
-st.set_page_config(
-    page_title="GAPC Portal",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="GAPC Portal", layout="wide", initial_sidebar_state="expanded")
 
 # ----------------------------
-# CSS con paneles más anchos (mantener aspecto)
+# CSS / estilo (mantener apariencia)
 # ----------------------------
 st.markdown(
     """
@@ -88,30 +86,27 @@ st.markdown(
 )
 
 # ----------------------------
-# SESSIONS
+# SESIONES
 # ----------------------------
 st.session_state.setdefault("session_iniciada", False)
 st.session_state.setdefault("usuario", None)
 st.session_state.setdefault("user_role", None)
 
-# ----------------------------
-# Mostrar login si no hay sesión
-# ----------------------------
+# Si no hay sesión: mostrar login y detener ejecución
 if not st.session_state["session_iniciada"]:
-    # muestra el login (login_page debe establecer st.session_state["session_iniciada"]=True al autenticar)
     try:
-        login_page()
+        login_page()  # debe establecer session_iniciada a True al autenticar
     except Exception as e:
         st.error(f"Error al cargar la pantalla de login: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
-    # cerrar la card y detener la ejecución hasta que el usuario se loguee
+    # cerramos la card y detenemos hasta que session_iniciada sea True
     st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()  # <-- FIX definitivo: corta la ejecución aquí hasta que session_iniciada True
+    st.stop()
 
 # ----------------------------
-# POST LOGIN
+# POST-LOGIN: barra lateral y selección de página
 # ----------------------------
 with st.sidebar:
     st.title("Menú")
@@ -132,6 +127,7 @@ with st.sidebar:
             "Ciclos",
             "Grupos",
             "Reportes",
+            "Usuarios",
             "Configuración",
         ],
     )
@@ -155,69 +151,88 @@ else:
     st.success("DB conectado")
 
 # ----------------------------
-# Helpers para import dinámico de páginas
+# Lista de tablas conocidas (ajusta si tu nombre real difiere)
 # ----------------------------
-def _import_and_call(module_path: str, func_names: list):
-    """
-    Importa dinamicamente module_path y llama la primera función encontrada en func_names.
-    Retorna True si se llamó la página correctamente; si no, lanza excepción.
-    """
+TABLE_MAP = {
+    "Dashboard": None,
+    "Miembros": "miembro",
+    "Aportes": "aporte",
+    "Préstamos": "prestamo",
+    "Cuotas": "cuota",
+    "Caja": "caja",
+    "Reuniones": "reunion",
+    "Asistencia": "asistencia",
+    "Multas": "multa",
+    "Cierres": "cierre",
+    "Promotoras": "promotora",
+    "Ciclos": "ciclo",
+    "Grupos": "grupo",
+    "Reportes": "reporte",
+    "Usuarios": "users",
+    "Configuración": None,
+}
+
+# ----------------------------
+# Función genérica que muestra la tabla (safe)
+# ----------------------------
+def render_table_from_db(table_name: str, limit: int = 200):
+    st.subheader(f"Tabla: {table_name}  ⚡")
+    engine = get_engine()
+    q_text = f"SELECT * FROM {table_name} LIMIT :lim"
     try:
-        module = __import__(module_path, fromlist=["*"])
+        with engine.connect() as conn:
+            q = text(q_text)
+            rows = conn.execute(q, {"lim": limit}).mappings().all()
+            if not rows:
+                st.info("No hay registros (vacío) o no se devolvieron filas.")
+                return
+            df = pd.DataFrame(rows)
+            st.dataframe(df)  # muestra interactiva
     except Exception as e:
-        raise ImportError(f"Módulo {module_path} no encontrado: {e}") from e
-
-    for fname in func_names:
-        fn = getattr(module, fname, None)
-        if callable(fn):
-            fn()
-            return True
-
-    raise AttributeError(f"Ninguna de las funciones {func_names} está definida en {module_path}.")
+        # Mostrar error SQL completo para que lo copies y lo arreglemos
+        st.error(f"Error al ejecutar la consulta en '{table_name}': {e}")
+        st.caption("Revisa que la tabla/columnas existan en la base de datos remota y que los nombres coincidan exactamente.")
 
 # ----------------------------
-# Páginas (carga dinámica)
+# Comportamiento por página (genérico)
 # ----------------------------
-try:
-    if opcion == "Dashboard":
-        _import_and_call("modulos.pages.dashboard_page", ["render_dashboard", "dashboard_page"])
-    elif opcion == "Miembros":
-        _import_and_call("modulos.pages.miembros_page", ["render_miembros", "miembros_page"])
-    elif opcion == "Aportes":
-        _import_and_call("modulos.pages.ahorro_page", ["render_ahorro", "ahorro_page"])
-    elif opcion == "Préstamos":
-        _import_and_call("modulos.pages.prestamos_page", ["render_prestamos", "prestamos_page"])
-    elif opcion == "Cuotas":
-        _import_and_call("modulos.pages.cuota_page", ["render_cuota", "cuota_page"])
-    elif opcion == "Caja":
-        _import_and_call("modulos.pages.caja_page", ["render_caja", "caja_page"])
-    elif opcion == "Reuniones":
-        _import_and_call("modulos.pages.reunion_page", ["render_reunion", "reunion_page"])
-    elif opcion == "Asistencia":
-        _import_and_call("modulos.pages.asistencia_page", ["render_asistencia", "asistencia_page"])
-    elif opcion == "Multas":
-        _import_and_call("modulos.pages.multas_page", ["render_multas", "multas_page"])
-    elif opcion == "Cierres":
-        _import_and_call("modulos.pages.cierre_page", ["render_cierre", "cierre_page"])
-    elif opcion == "Promotoras":
-        _import_and_call("modulos.pages.promotora_page", ["render_promotora", "promotora_page"])
-    elif opcion == "Ciclos":
-        _import_and_call("modulos.pages.ciclo_page", ["render_ciclo", "ciclo_page"])
-    elif opcion == "Grupos":
-        _import_and_call("modulos.pages.grupo_page", ["render_grupo", "grupo_page"])
-    elif opcion == "Reportes":
-        _import_and_call("modulos.pages.reporte_page", ["render_reporte", "reporte_page"])
-    elif opcion == "Configuración":
-        _import_and_call("modulos.pages.config_page", ["render_config", "config_page"])
+if opcion == "Dashboard":
+    st.header("Dashboard — Resumen operativo")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total miembros", "—")
+    c2.metric("Préstamos vigentes", "—")
+    c3.metric("Saldo caja", "—")
+    st.subheader("Actividad reciente")
+    st.table([])
+
+elif opcion in TABLE_MAP:
+    tbl = TABLE_MAP[opcion]
+    if tbl is None:
+        st.info(f"Página '{opcion}' — aquí irá la interfaz completa (formulario / reportes).")
     else:
-        st.info("Opción no válida.")
-except ImportError as ie:
-    st.warning(f"Página no encontrada: {ie}")
-    st.info("Verifica que el archivo exista en modulos/pages/ y que la función render_* esté definida.")
-except AttributeError as ae:
-    st.warning(f"Función de render no encontrada en módulo: {ae}")
-except Exception as e:
-    st.error(f"Error al cargar la página: {e}")
+        # tratamiento especial para USERS (muestro columnas esperadas)
+        if tbl == "users":
+            st.header("Usuarios — gestión")
+            st.write("Mostrando columnas principales (id, username, full_name, email, role, created_at)")
+            engine = get_engine()
+            q = text("SELECT id, username, full_name, email, role, created_at FROM users LIMIT :lim")
+            try:
+                with engine.connect() as conn:
+                    rows = conn.execute(q, {"lim": 200}).mappings().all()
+                    if not rows:
+                        st.info("No hay usuarios registrados.")
+                    else:
+                        df = pd.DataFrame(rows)
+                        st.dataframe(df)
+            except Exception as e:
+                st.error(f"Error al consultar 'users': {e}")
+                st.caption("Si la tabla existe pero la consulta falla, puede ser que los nombres de columna sean distintos. Muestra el error completo y lo corrijo.")
+        else:
+            # Genérico: listar la tabla completa (SELECT * LIMIT)
+            render_table_from_db(tbl)
+
+else:
+    st.info("Opción no implementada todavía.")
 
 # cerrar card
 st.markdown("</div>", unsafe_allow_html=True)
