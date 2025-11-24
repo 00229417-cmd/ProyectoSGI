@@ -1,75 +1,72 @@
-# modulos/db/crud_prestamo.py
-from typing import Optional
-from sqlalchemy import text
-from modulos.config.conexion import get_engine
+# modulos/pages/prestamos_page.py
 
-def create_prestamo(
-    id_ciclo: int,
-    id_miembro: int,
-    monto: float,
-    intereses: float,
-    plazo_meses: int,
-    id_promotora: Optional[int] = None,
-    fecha_solicitud: Optional[str] = None
-) -> Optional[int]:
-    """
-    Crea un préstamo y retorna el id insertado.
-    """
-    engine = get_engine()
+import streamlit as st
+from modulos.db.crud_prestamo import create_prestamo, listar_prestamos
 
-    sql = """
-    INSERT INTO prestamo
-      (id_promotora, id_ciclo, id_miembro, monto, intereses, saldo_restante, estado, plazo_meses, total_cuotas, fecha_solicitud)
-    VALUES
-      (:id_prom, :id_ciclo, :id_miembro, :monto, :intereses, :saldo, :estado, :plazo, :total_cuotas, :fecha_solicitud)
-    """
 
-    params = {
-        "id_prom": id_promotora,
-        "id_ciclo": id_ciclo,
-        "id_miembro": id_miembro,
-        "monto": float(monto),
-        "intereses": float(intereses),
-        "saldo": float(monto),
-        "estado": "activo",
-        "plazo": int(plazo_meses),
-        "total_cuotas": 0,
-        "fecha_solicitud": fecha_solicitud
-    }
+# =====================================================
+# RENDER – PÁGINA DE PRÉSTAMOS
+# =====================================================
+def render_prestamos():
+
+    st.markdown("## 💸 Préstamos")
+
+    # ================================
+    # Mostrar listado
+    # ================================
+    st.subheader("Listado de préstamos")
 
     try:
-        with engine.begin() as conn:
-            res = conn.execute(text(sql), params)
-            # Intentos robustos para obtener last insert id
-            try:
-                last = res.lastrowid
-                if last:
-                    return int(last)
-            except Exception:
-                pass
-            # Fallback
-            r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).mappings().first()
-            if r and "id" in r:
-                return int(r["id"])
-            return None
+        prestamos = listar_prestamos()
+        if prestamos:
+            st.table(prestamos)
+        else:
+            st.info("No hay préstamos registrados aún.")
     except Exception as e:
-        raise RuntimeError(f"Error creando prestamo: {e}")
+        st.error(f"Error cargando préstamos: {e}")
 
+    st.write("---")
 
-def listar_prestamos(limit: int = 200):
-    """
-    Retorna lista de prestamos (como lista de dicts).
-    Usa .mappings() para obtener MappingResult (diccionarios).
-    """
-    engine = get_engine()
-    sql = "SELECT * FROM prestamo ORDER BY id_prestamo DESC LIMIT :lim"
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(text(sql), {"lim": limit}).mappings().all()
-        return [dict(r) for r in rows]
-    except Exception as e:
-        raise RuntimeError(f"Error listando préstamos: {e}")
+    # ================================
+    # Crear nuevo préstamo
+    # ================================
+    st.subheader("Crear préstamo")
 
+    # FORMULARIO
+    with st.form("form_prestamo"):
+
+        id_ciclo = st.number_input("ID Ciclo", min_value=1)
+        id_miembro = st.number_input("ID Miembro", min_value=1)
+        id_promotora = st.number_input("ID Promotora (opcional)", min_value=0)
+
+        monto = st.number_input("Monto", min_value=0.0)
+        intereses = st.number_input("Intereses (%)", min_value=0.0)
+        plazo_meses = st.number_input("Plazo (meses)", min_value=1)
+
+        fecha_solicitud = st.date_input("Fecha de solicitud (opcional)", value=None)
+
+        submitted = st.form_submit_button("Crear préstamo")
+
+    if submitted:
+        try:
+            fid = create_prestamo(
+                id_ciclo=id_ciclo,
+                id_miembro=id_miembro,
+                monto=monto,
+                intereses=intereses,
+                plazo_meses=plazo_meses,
+                id_promotora=id_promotora or None,
+                fecha_solicitud=str(fecha_solicitud) if fecha_solicitud else None
+            )
+
+            if fid:
+                st.success(f"Préstamo creado correctamente. ID: {fid}")
+                st.rerun()
+            else:
+                st.error("No se pudo obtener el ID del préstamo creado.")
+
+        except Exception as e:
+            st.error(f"Error creando préstamo: {e}")
 
 
 
