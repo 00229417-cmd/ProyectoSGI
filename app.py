@@ -1,7 +1,7 @@
 # app.py
 import streamlit as st
-from modulos.config.conexion import test_connection  # deja get_engine para los CRUD
-from modulos.login import login_page  # login_page solo se importa (no circular)
+from modulos.config.conexion import test_connection  # get_engine lo usan los CRUD/páginas
+from modulos.login import login_page  # solo importamos la función de login (no circular)
 
 st.set_page_config(
     page_title="GAPC Portal",
@@ -62,6 +62,11 @@ st.markdown(
         transition: transform .12s ease, box-shadow .12s ease;
     }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(20,60,120,0.12); }
+
+    /* ancho mayor para formularios/tablas dentro de la card (mejora visual) */
+    .center-card .stDataFrame, .center-card .stTable {
+        width: 100% !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -93,8 +98,15 @@ st.session_state.setdefault("user_role", None)
 # Mostrar login si no hay sesión
 # ----------------------------
 if not st.session_state["session_iniciada"]:
-    # muestra el login (esto puede modificar st.session_state)
-    login_page()
+    # muestra el login (login_page debe establecer st.session_state["session_iniciada"]=True al autenticar)
+    try:
+        login_page()
+    except Exception as e:
+        st.error(f"Error al cargar la pantalla de login: {e}")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
+
+    # siempre cerrar la card y detener la ejecución hasta que el usuario se loguee
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()  # <-- FIX definitivo: corta la ejecución aquí hasta que session_iniciada True
 
@@ -110,12 +122,12 @@ with st.sidebar:
         st.session_state["session_iniciada"] = False
         st.session_state["usuario"] = None
         st.session_state["user_role"] = None
-        # intentar rerun para refrescar
+        # intentar rerun para refrescar; si falla, recarga por JS
         try:
             if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
                 st.experimental_rerun()
         except Exception:
-            st.experimental_set_query_params(_reload="1")  # fallback ligero
+            st.experimental_set_query_params(_reload="1")
 
 # Test DB (opcional)
 ok, msg = test_connection()
@@ -124,12 +136,37 @@ if not ok:
 else:
     st.success("DB conectado")
 
-# Páginas (llaman a módulos/pages/* si existen)
+# ----------------------------
+# Helpers para import dinámico de páginas
+# - Intentamos importar la página y una de dos nombres de función (compatibilidad)
+# ----------------------------
+def _import_and_call(module_path: str, func_names: list):
+    """
+    Importa dinamicamente module_path y llama la primera función encontrada en func_names.
+    Retorna True si se llamó la página correctamente; si no, lanza excepción.
+    """
+    try:
+        module = __import__(module_path, fromlist=["*"])
+    except Exception as e:
+        raise ImportError(f"Módulo {module_path} no encontrado: {e}") from e
+
+    for fname in func_names:
+        fn = getattr(module, fname, None)
+        if callable(fn):
+            fn()
+            return True
+
+    raise AttributeError(f"Ninguna de las funciones {func_names} está definida en {module_path}.")
+
+
+# ----------------------------
+# Páginas (carga dinámica, mensajes claros si faltan modulos)
+# ----------------------------
 if opcion == "Dashboard":
     try:
-        from modulos.pages.dashboard_page import render_dashboard
-        render_dashboard()
-    except Exception:
+        # admite dos convenciones: render_dashboard() o dashboard_page()
+        _import_and_call("modulos.pages.dashboard_page", ["render_dashboard", "dashboard_page"])
+    except Exception as e:
         st.info("Página 'Dashboard' (módulo modulos.pages.dashboard_page) no encontrada — mostrando placeholder.")
         st.header("Dashboard — (placeholder)")
         st.subheader("Actividad reciente")
@@ -137,29 +174,43 @@ if opcion == "Dashboard":
 
 elif opcion == "Miembros":
     try:
-        from modulos.pages.miembros_page import render_miembros
-        render_miembros()
-    except Exception:
+        # admite render_miembros() o render_miembros / miembros_page / render_miembros_page
+        _import_and_call("modulos.pages.miembros_page", ["render_miembros", "miembros_page", "render_miembros_page"])
+    except Exception as e:
         st.error("Error al cargar la página 'Miembros': revisa modulos/db/crud_miembros.py para imports circulares.")
         st.header("Miembros — (placeholder)")
         st.info("Aún no hay implementación completa. Aquí irá la tabla con registros / CRUD.")
         st.table([])
 
 elif opcion == "Aportes":
-    st.header("Aportes")
-    st.info("Registrar aportes (implementar).")
+    try:
+        _import_and_call("modulos.pages.aportes_page", ["render_aportes", "aportes_page"])
+    except Exception:
+        st.header("Aportes")
+        st.info("Página 'Aportes' no encontrada. Implementar modulos/pages/aportes_page.py")
 
 elif opcion == "Préstamos":
-    st.header("Préstamos")
-    st.info("Solicitudes y pagos (implementar).")
+    try:
+        _import_and_call("modulos.pages.prestamos_page", ["render_prestamos", "prestamos_page"])
+    except Exception:
+        st.header("Préstamos")
+        st.info("Página 'Préstamos' no encontrada. Implementar modulos/pages/prestamos_page.py")
 
 elif opcion == "Caja":
-    st.header("Caja")
-    st.info("Movimientos de caja (implementar).")
+    try:
+        _import_and_call("modulos.pages.caja_page", ["render_caja", "caja_page"])
+    except Exception:
+        st.header("Caja")
+        st.info("Página 'Caja' no encontrada. Implementar modulos/pages/caja_page.py")
 
 elif opcion == "Reportes":
-    st.header("Reportes")
-    st.info("Exportar PDF / Excel (implementar).")
+    try:
+        _import_and_call("modulos.pages.reportes_page", ["render_reportes", "reportes_page"])
+    except Exception:
+        st.header("Reportes")
+        st.info("Página 'Reportes' no encontrada. Implementar modulos/pages/reportes_page.py")
 
+# cerrar card
 st.markdown("</div>", unsafe_allow_html=True)
+
 
