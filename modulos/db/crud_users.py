@@ -11,39 +11,33 @@ def get_user_by_username(username: str):
         return dict(r) if r else None
 
 def create_user(username: str, password: str, full_name: str = None, email: str = None, role: str = "user"):
-    """
-    Inserta usuario; devuelve True si OK, False si falla.
-    """
     engine = get_engine()
     hashed = generate_password_hash(password)
-    try:
-        with engine.begin() as conn:
-            q = text("""
-                INSERT INTO users (username, password_hash, full_name, email, role)
-                VALUES (:u, :ph, :fn, :em, :r)
-            """)
-            conn.execute(q, {"u": username, "ph": hashed, "fn": full_name, "em": email, "r": role})
-            # confirmar con SELECT
-            q2 = text("SELECT id FROM users WHERE username = :u LIMIT 1")
-            row = conn.execute(q2, {"u": username}).mappings().first()
-            return True if row else False
-    except Exception as e:
-        # imprime la excepción en logs; devuelve False para no romper UI
-        import traceback
-        traceback.print_exc()
-        return False
+    with engine.begin() as conn:
+        q = text("""
+            INSERT INTO users (username, password_hash, full_name, email, role)
+            VALUES (:u, :ph, :fn, :em, :r)
+        """)
+        try:
+            res = conn.execute(q, {"u": username, "ph": hashed, "fn": full_name, "em": email, "r": role})
+            # retornamos True si OK
+            return True
+        except Exception:
+            return False
 
 def verify_user_credentials(username: str, password: str):
     """
-    Verifica y devuelve (True, user_dict) o (False, mensaje)
+    devuelve (True, user_dict) si OK, (False, mensaje) si error
     """
-    u = get_user_by_username(username)
-    if not u:
-        return False, "usuario no existe"
-    ph = u.get("password_hash")
-    if not ph:
-        return False, "hash no encontrado"
-    if check_password_hash(ph, password):
-        return True, u
-    return False, "contraseña inválida"
+    user = get_user_by_username(username)
+    if not user:
+        return False, "Usuario no encontrado."
+    ph = user.get("password_hash")
+    try:
+        if check_password_hash(ph, password):
+            return True, user
+        else:
+            return False, "Contraseña incorrecta."
+    except Exception as e:
+        return False, "Error al verificar credenciales."
 
