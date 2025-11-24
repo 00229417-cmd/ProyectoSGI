@@ -307,4 +307,4 @@ def render_config():
     _render_system_options()
     st.markdown("---")
 
-    st.caption("Si quieres que conecte con funciones concretas de tu proyecto (nombres de funciones exactos en crud_users/crud_logs/crud_settings), dime los nombres y ajusto el código para llamarlos exactamente.")
+ 
