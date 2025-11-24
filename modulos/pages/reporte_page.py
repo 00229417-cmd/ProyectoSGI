@@ -1,71 +1,87 @@
 # modulos/pages/reporte_page.py
 import streamlit as st
-from sqlalchemy import text
-from modulos.config.conexion import get_engine
 from modulos.db import crud_reporte
+# importamos el helper que permite buscar admins (si el módulo existe)
+try:
+    from modulos.db import crud_administrador
+except Exception:
+    crud_administrador = None
 
-def _resolve_admin_to_id(candidate: str | int) -> int | None:
+def _resolve_admin_input(admin_input: str):
     """
-    Intenta convertir candidate a entero.
-    Si no es entero, busca en la tabla administrador por correo/nombre/apellido.
-    Devuelve id_administrador (int) o None si no encuentra.
+    admin_input puede ser:
+      - ID numérico -> devuelve int
+      - username / email / nombre completo -> intenta resolver con crud_administrador
+    Retorna (id_administrador:int | None, mensaje_error:str|None)
     """
-    if candidate is None or candidate == "":
-        return None
-    # si ya es entero
+    if admin_input is None or str(admin_input).strip() == "":
+        return None, "No se proporcionó administrador."
+
+    # 1) intentar int
     try:
-        return int(candidate)
+        aid = int(admin_input)
+        return aid, None
     except Exception:
         pass
 
-    # buscar en BD
-    try:
-        engine = get_engine()
-        with engine.connect() as conn:
-            q = text("""
-                SELECT id_administrador
-                FROM administrador
-                WHERE correo = :v OR nombre = :v OR apellido = :v
-                LIMIT 1
-            """)
-            r = conn.execute(q, {"v": candidate}).fetchone()
-            if r:
-                try:
-                    return int(r[0])
-                except Exception:
-                    return None
-    except Exception as e:
-        st.error(f"Error resolviendo administrador: {e}")
-        return None
+    # 2) intentar resolver por username / email / nombre (si está el crud)
+    if crud_administrador:
+        admin = crud_administrador.get_by_username_or_email(admin_input)
+        if admin:
+            # ajustar clave si tu CRUD devuelve otra clave
+            return int(admin.get("id_administrador") or admin.get("id") or admin.get("id_admin")), None
+
+    return None, "No se pudo resolver administrador. Ingresa ID numérico o un username/email válido."
 
 def render_reporte():
-    st.header("Generar reporte")
+    st.title("Generar reporte")
 
-    with st.form("form_reporte"):
-        tipo = st.selectbox("Tipo de reporte", ["mora", "cierre", "balance", "morosidad"])
-        id_ciclo = st.text_input("ID ciclo (opcional)", value="")
-        usuario_input = st.text_input("Usuario/ID administrador", value=st.session_state.get("usuario",""))
-        descripcion = st.text_area("Descripción (opcional)", value="")
-        submitted = st.form_submit_button("Crear reporte")
+    # Tipo de reporte
+    tipo = st.selectbox("Tipo de reporte", ["mora", "cierre", "balance"], index=0)
 
-    if not submitted:
-        return
+    # ID ciclo opcional: solo aceptar enteros o dejar vacío
+    id_ciclo_input = st.text_input("ID ciclo (opcional)", value="", help="Si lo dejas vacío se guardará NULL")
+    id_ciclo = None
+    if id_ciclo_input.strip() != "":
+        try:
+            id_ciclo = int(id_ciclo_input)
+        except Exception:
+            st.warning("ID ciclo debe ser numérico o dejarlo vacío.")
+            id_ciclo = None
 
-    # 1) prioridad: usar id guardado en sesión (recomendado)
-    id_admin_session = st.session_state.get("usuario_id")
-    if id_admin_session:
-        id_adm_param = id_admin_session
+    # Preferir id desde sesión
+    session_admin_id = st.session_state.get("usuario_id") or st.session_state.get("usuario_id_adm") or None
+
+    st.markdown("**Usuario / administrador que genera el reporte**")
+    if session_admin_id:
+        st.write(f"Usando usuario en sesión (id): **{session_admin_id}**")
+        admin_id = session_admin_id
     else:
-        # 2) si no hay id en sesión, resolver el texto que el usuario ingresó
-        id_adm_param = _resolve_admin_to_id(usuario_input)
+        admin_input = st.text_input("Usuario/ID administrador (ID numérico, username o email)", value="")
+        admin_id, err = _resolve_admin_input(admin_input)
+        if err and admin_input:
+            st.warning(err)
 
-    if id_adm_param is None:
-        st.error("No se pudo resolver un id_administrador válido. Guarda el id en la sesión al loguear o ingresa un id numérico o el correo/nombre exacto del administrador.")
-        return
+    descripcion = st.text_area("Descripción (opcional)", value="")
 
-    # Llamada al CRUD (crud_reporte.create_reporte debe aceptar id_adm int o hacer su propia validación)
-    res = crud_reporte.create_reporte(id_ciclo, id_adm_param, tipo, descripcion)
-    if res.get("ok"):
-        st.success(f"Reporte creado correctamente. id = {res.get('id')}")
-    else:
-        st.error(f"Error creando reporte: {res.get('msg')}")
+    if st.button("Generar reporte"):
+        # validar admin_id
+        if not admin_id:
+            st.error("No se pudo resolver un id_administrador válido. Guarda el id en la sesión al loguear o ingresa un id numérico o el correo/nombre exacto del administrador.")
+            return
+
+        # llamar al CRUD
+        ok, msg = crud_reporte.create_reporte(id_ciclo=id_ciclo, id_administrador=int(admin_id), tipo=tipo, descripcion=descripcion or None)
+        if ok:
+            st.success("Reporte creado y en estado 'pendiente'.")
+        else:
+            st.error(f"Error creando reporte: {msg}")
+
+# Exponer función principal para app.py
+def render_reporte_page():
+    render_reporte()
+
+# Para compatibilidad con tu loader que intenta varios nombres:
+def render_reporte():
+    render_reporte()
+
