@@ -3,84 +3,53 @@ from typing import List, Dict, Tuple, Optional
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
 
-# Nota: no importes páginas u otros módulos que importen a este para evitar imports circulares.
+def _fetchall_as_dicts(result_proxy) -> List[Dict]:
+    rows = result_proxy.fetchall()
+    keys = result_proxy.keys()
+    return [dict(zip(keys, row)) for row in rows]
 
-def list_miembros(limit: int = 500) -> List[Dict]:
+def list_miembros(limit: int = 500) -> Tuple[bool, List[Dict], Optional[str]]:
     """
-    Retorna lista de miembros como diccionarios.
+    Devuelve (ok, rows, msg). rows es lista de dicts con columnas de la tabla `miembro`.
     """
-    engine = get_engine()
-    sql = text(
-        "SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion "
-        "FROM miembro ORDER BY id_miembro DESC LIMIT :lim"
-    )
-    with engine.connect() as conn:
-        result = conn.execute(sql, {"lim": limit})
-        rows = [dict(r._mapping) for r in result.fetchall()]
-    return rows
-
-
-def get_miembro(id_miembro: int) -> Optional[Dict]:
-    engine = get_engine()
-    sql = text(
-        "SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion "
-        "FROM miembro WHERE id_miembro = :id"
-    )
-    with engine.connect() as conn:
-        r = conn.execute(sql, {"id": id_miembro}).fetchone()
-        return dict(r._mapping) if r else None
-
-
-def create_miembro(id_tipo_usuario: Optional[int], nombre: str, apellido: str, dui: str, direccion: str) -> Tuple[bool, str]:
-    engine = get_engine()
-    sql = text(
-        "INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion) "
-        "VALUES (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion)"
-    )
     try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            # Ajusta columnas si tu tabla tiene nombres diferentes; esta consulta asume la estructura mínima
+            q = text("SELECT id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion FROM miembro ORDER BY id_miembro DESC LIMIT :lim")
+            res = conn.execute(q, {"lim": limit})
+            rows = _fetchall_as_dicts(res)
+        return True, rows, None
+    except Exception as e:
+        return False, [], str(e)
+
+def create_miembro(nombre: str, apellido: str, dui: str = None, direccion: str = None, id_tipo_usuario: int = None) -> Tuple[bool, Optional[int], Optional[str]]:
+    """
+    Inserta un miembro y devuelve (ok, new_id, msg)
+    """
+    try:
+        engine = get_engine()
         with engine.begin() as conn:
-            conn.execute(sql, {
+            q = text("""
+                INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion)
+                VALUES (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion)
+            """)
+            res = conn.execute(q, {
                 "id_tipo_usuario": id_tipo_usuario,
                 "nombre": nombre,
                 "apellido": apellido,
                 "dui": dui,
                 "direccion": direccion
             })
-        return True, "Miembro creado correctamente."
+            # res.lastrowid puede variar; con SQLAlchemy 1.4 res.inserted_primary_key
+            try:
+                new_id = res.lastrowid
+            except Exception:
+                new_id = None
+        return True, new_id, None
     except Exception as e:
-        return False, f"Error creando miembro: {e}"
+        return False, None, str(e)
 
-
-def update_miembro(id_miembro: int, id_tipo_usuario: Optional[int], nombre: str, apellido: str, dui: str, direccion: str) -> Tuple[bool, str]:
-    engine = get_engine()
-    sql = text(
-        "UPDATE miembro SET id_tipo_usuario = :id_tipo_usuario, nombre = :nombre, apellido = :apellido, "
-        "dui = :dui, direccion = :direccion WHERE id_miembro = :id_miembro"
-    )
-    try:
-        with engine.begin() as conn:
-            conn.execute(sql, {
-                "id_tipo_usuario": id_tipo_usuario,
-                "nombre": nombre,
-                "apellido": apellido,
-                "dui": dui,
-                "direccion": direccion,
-                "id_miembro": id_miembro
-            })
-        return True, "Miembro actualizado."
-    except Exception as e:
-        return False, f"Error actualizando miembro: {e}"
-
-
-def delete_miembro(id_miembro: int) -> Tuple[bool, str]:
-    engine = get_engine()
-    sql = text("DELETE FROM miembro WHERE id_miembro = :id")
-    try:
-        with engine.begin() as conn:
-            conn.execute(sql, {"id": id_miembro})
-        return True, "Miembro eliminado."
-    except Exception as e:
-        return False, f"Error eliminando miembro: {e}"
 
 
 
