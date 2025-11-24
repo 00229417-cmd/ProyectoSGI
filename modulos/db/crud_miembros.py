@@ -1,23 +1,13 @@
 # modulos/db/crud_miembros.py
+from typing import List, Dict, Any, Optional
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
 
-# Guardamos engine en módulo para reusar
-_engine = None
-
-def _ensure_engine():
-    global _engine
-    if _engine is None:
-        _engine = get_engine()
-    return _engine
-
-def list_miembros(limit: int = 500):
+def obtener_miembros(limit: int = 500) -> List[Dict[str, Any]]:
     """
-    Retorna lista de miembros como lista de dicts.
-    Usamos .mappings() para obtener filas como mapeos (clave->valor),
-    compatible con diferentes versiones de SQLAlchemy.
+    Devuelve la lista de miembros con las columnas:
+    id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion
     """
-    engine = _ensure_engine()
     sql = text("""
         SELECT
             id_miembro,
@@ -30,53 +20,97 @@ def list_miembros(limit: int = 500):
         ORDER BY id_miembro DESC
         LIMIT :lim
     """)
+    engine = get_engine()
     with engine.connect() as conn:
         res = conn.execute(sql, {"lim": limit})
-        # RES: Result
-        try:
-            mappings = res.mappings().all()  # lista de MappingResult (dict-like)
-            rows = [dict(r) for r in mappings]
-        except Exception:
-            # Fallback: intentar convertir cada row usando _mapping o enumerar columnas
-            rows = []
-            cols = res.keys()
-            for r in res:
-                try:
-                    rows.append(dict(r._mapping))
-                except Exception:
-                    # último recurso: construir dict por posición usando columnas
-                    rows.append({cols[i]: r[i] for i in range(len(cols))})
+        rows = res.mappings().all()  # mapea a dicts
     return rows
 
-def create_miembro(nombre: str, apellido: str, dui: str = None, direccion: str = None, id_tipo_usuario: int = None):
-    """
-    Inserta un miembro y retorna el id insertado.
-    Usa INSERT + LAST_INSERT_ID() como fallback si res.lastrowid no está disponible.
-    """
-    engine = _ensure_engine()
-    insert_sql = text("""
-        INSERT INTO miembro (id_tipo_usuario, nombre, apellido, dui, direccion)
-        VALUES (:id_tipo_usuario, :nombre, :apellido, :dui, :direccion)
+def obtener_miembro_por_id(id_miembro: int) -> Optional[Dict[str, Any]]:
+    sql = text("""
+        SELECT
+            id_miembro,
+            id_tipo_usuario,
+            nombre,
+            apellido,
+            dui,
+            direccion
+        FROM miembro
+        WHERE id_miembro = :id_miembro
+        LIMIT 1
     """)
-    with engine.begin() as conn:
-        res = conn.execute(insert_sql, {
-            "id_tipo_usuario": id_tipo_usuario,
-            "nombre": nombre,
-            "apellido": apellido,
-            "dui": dui,
-            "direccion": direccion
-        })
-        # intentamos obtener lastrowid
-        new_id = None
-        try:
-            new_id = int(res.lastrowid)
-        except Exception:
-            try:
-                r = conn.execute(text("SELECT LAST_INSERT_ID() AS id")).fetchone()
-                new_id = int(r["id"]) if r and "id" in r else None
-            except Exception:
-                new_id = None
-    return new_id
+    engine = get_engine()
+    with engine.connect() as conn:
+        res = conn.execute(sql, {"id_miembro": id_miembro})
+        row = res.mappings().first()
+    return row
 
+def crear_miembro(data: Dict[str, Any]) -> int:
+    sql = text("""
+        INSERT INTO miembro (
+            id_tipo_usuario,
+            nombre,
+            apellido,
+            dui,
+            direccion
+        ) VALUES (
+            :id_tipo_usuario,
+            :nombre,
+            :apellido,
+            :dui,
+            :direccion
+        )
+    """)
+    engine = get_engine()
+    with engine.begin() as conn:
+        res = conn.execute(sql, data)
+        try:
+            return int(res.lastrowid)
+        except Exception:
+            return 0
+
+def actualizar_miembro(id_miembro: int, data: Dict[str, Any]) -> bool:
+    sql = text("""
+        UPDATE miembro
+        SET
+            id_tipo_usuario = :id_tipo_usuario,
+            nombre = :nombre,
+            apellido = :apellido,
+            dui = :dui,
+            direccion = :direccion
+        WHERE id_miembro = :id_miembro
+    """)
+    params = dict(data)
+    params["id_miembro"] = id_miembro
+    engine = get_engine()
+    with engine.begin() as conn:
+        res = conn.execute(sql, params)
+        return res.rowcount > 0
+
+def eliminar_miembro(id_miembro: int) -> bool:
+    sql = text("DELETE FROM miembro WHERE id_miembro = :id_miembro")
+    engine = get_engine()
+    with engine.begin() as conn:
+        res = conn.execute(sql, {"id_miembro": id_miembro})
+        return res.rowcount > 0
+
+def obtener_tipos_usuario(limit: int = 200):
+    """
+    Devuelve lista de tipos si existe la tabla `tipo_usuario`.
+    Retorna [] si la tabla no existe o falla.
+    """
+    sql = text("""
+        SELECT id_tipo AS id_tipo_usuario, nombre
+        FROM tipo_usuario
+        ORDER BY id_tipo
+        LIMIT :lim
+    """)
+    engine = get_engine()
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(sql, {"lim": limit})
+            return res.mappings().all()
+    except Exception:
+        return []
 
 
