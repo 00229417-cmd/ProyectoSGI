@@ -19,16 +19,12 @@ def create_user(username: str, password: str, full_name: str = None, email: str 
             VALUES (:u, :ph, :fn, :em, :r)
         """)
         try:
-            res = conn.execute(q, {"u": username, "ph": hashed, "fn": full_name, "em": email, "r": role})
-            # retornamos True si OK
+            conn.execute(q, {"u": username, "ph": hashed, "fn": full_name, "em": email, "r": role})
             return True
         except Exception:
             return False
 
 def verify_user_credentials(username: str, password: str):
-    """
-    devuelve (True, user_dict) si OK, (False, mensaje) si error
-    """
     user = get_user_by_username(username)
     if not user:
         return False, "Usuario no encontrado."
@@ -38,6 +34,13 @@ def verify_user_credentials(username: str, password: str):
             return True, user
         else:
             return False, "Contraseña incorrecta."
-    except Exception as e:
+    except Exception:
         return False, "Error al verificar credenciales."
+
+def list_users(limit: int = 200):
+    engine = get_engine()
+    with engine.connect() as conn:
+        q = text("SELECT id, username, full_name, email, role, created_at FROM users ORDER BY id DESC LIMIT :lim")
+        rows = conn.execute(q, {"lim": limit}).mappings().all()
+        return [dict(r) for r in rows]
 
