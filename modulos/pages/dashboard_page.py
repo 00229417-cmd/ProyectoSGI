@@ -1,73 +1,45 @@
 # modulos/pages/dashboard_page.py
-
 import streamlit as st
+from sqlalchemy import text
 from modulos.config.conexion import get_engine
-import pandas as pd
 
-# ============================================
-# DASHBOARD PRINCIPAL
-# ============================================
+ICON = "📊"
 
 def render_dashboard():
-    st.header("📊 Dashboard — Resumen General")
-
+    st.markdown(f"## {ICON} Dashboard")
     engine = get_engine()
 
+    # métricas simples: total miembros, prestamos vigentes, saldo caja
     try:
-        # ===============================
-        # Contadores principales
-        # ===============================
-        query_totales = {
-            "Miembros": "SELECT COUNT(*) AS total FROM miembro",
-            "Préstamos": "SELECT COUNT(*) AS total FROM prestamo",
-            "Ahorros": "SELECT COUNT(*) AS total FROM ahorro",
-            "Grupos": "SELECT COUNT(*) AS total FROM grupo",
-        }
-
-        col1, col2, col3, col4 = st.columns(4)
-
         with engine.connect() as conn:
-            for label, sql in query_totales.items():
-                try:
-                    result = conn.execute(sql).scalar()
-                except:
-                    result = "—"
+            total_miembros = conn.execute(text("SELECT COUNT(*) AS c FROM miembro")).fetchone()._mapping["c"]
+            prestamos_vigentes = conn.execute(text("SELECT COUNT(*) AS c FROM prestamo WHERE estado IS NULL OR estado <> 'finalizado'")).fetchone()._mapping["c"]
+            saldo_caja_row = conn.execute(text("SELECT SUM(saldo_final) AS s FROM caja")).fetchone()._mapping
+            saldo_caja = saldo_caja_row.get("s") if saldo_caja_row else None
 
-                if label == "Miembros":
-                    col1.metric(label, result)
-                elif label == "Préstamos":
-                    col2.metric(label, result)
-                elif label == "Ahorros":
-                    col3.metric(label, result)
-                elif label == "Grupos":
-                    col4.metric(label, result)
-
-        st.divider()
-
-        # ===============================
-        # Últimos movimientos del sistema
-        # ===============================
-        st.subheader("📌 Actividad reciente (últimos 15 registros)")
-
-        sql_movs = """
-        SELECT 
-            p.id_prestamo AS id,
-            m.nombre AS miembro,
-            p.monto AS monto,
-            p.estado AS estado
-        FROM prestamo p
-        LEFT JOIN miembro m ON m.id_miembro = p.id_miembro
-        ORDER BY p.id_prestamo DESC
-        LIMIT 15;
-        """
-
-        try:
-            df = pd.read_sql(sql_movs, engine)
-            st.dataframe(df)
-        except Exception as e:
-            st.warning(f"No se pudo cargar la actividad reciente: {e}")
-
+            # actividad reciente: últimos aportes (si existe la tabla aporte)
+            try:
+                recent = conn.execute(text(
+                    "SELECT id_aporte, id_miembro, monto, fecha, tipo FROM aporte ORDER BY id_aporte DESC LIMIT 6"
+                )).fetchall()
+                recent_list = [dict(r._mapping) for r in recent]
+            except Exception:
+                recent_list = []
     except Exception as e:
-        st.error(f"Error cargando dashboard: {e}")
+        st.error(f"Error leyendo métricas: {e}")
+        st.stop()
+        return
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total miembros", str(total_miembros))
+    c2.metric("Préstamos vigentes", str(prestamos_vigentes))
+    c3.metric("Saldo caja", f"{saldo_caja if saldo_caja is not None else '—'}")
+
+    st.markdown("### Actividad reciente (últimos aportes)")
+    if recent_list:
+        st.table(recent_list)
+    else:
+        st.info("No hay actividad reciente para mostrar.")
+
 
 
