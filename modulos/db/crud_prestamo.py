@@ -1,47 +1,52 @@
 # modulos/db/crud_prestamo.py
 from sqlalchemy import text
 from modulos.config.conexion import get_engine
-from typing import List, Optional
+from datetime import datetime, date
 
-def list_prestamos(limit: int = 200) -> List[dict]:
+def create_prestamo(id_ciclo, id_miembro, monto, intereses, plazo_meses, id_promotora=None, fecha_solicitud=None):
+    """
+    Crea un préstamo. fecha_solicitud puede ser:
+      - None  -> se inserta NULL
+      - datetime.date / datetime.datetime -> se usa directamente
+      - string 'YYYY-MM-DD' o 'YYYY-MM-DD HH:MM:SS' -> se usa tal cual
+    Retorna id del nuevo prestamo.
+    """
     engine = get_engine()
-    q = text("""
-        SELECT id_prestamo, id_promotora, id_ciclo, id_miembro, monto, intereses, saldo_restante, estado, fecha_solicitud
-        FROM prestamo
-        ORDER BY id_prestamo DESC
-        LIMIT :lim
-    """)
-    with engine.connect() as conn:
-        rows = conn.execute(q, {"lim": limit}).mappings().all()
-        return [dict(r) for r in rows]
+    if fecha_solicitud is None:
+        # si quieres que siempre tenga fecha, descomenta la siguiente línea:
+        # fecha_solicitud = datetime.now()
+        fecha_solicitud_val = None
+    else:
+        fecha_solicitud_val = fecha_solicitud
 
-def get_prestamo(id_prestamo: int) -> Optional[dict]:
-    engine = get_engine()
-    q = text("SELECT * FROM prestamo WHERE id_prestamo = :id LIMIT 1")
-    with engine.connect() as conn:
-        r = conn.execute(q, {"id": id_prestamo}).mappings().first()
-        return dict(r) if r else None
-
-def create_prestamo(id_promotora:int, id_ciclo:int, id_miembro:int, monto:float, intereses:float, plazo_meses:int):
-    engine = get_engine()
-    q = text("""
-        INSERT INTO prestamo (id_promotora, id_ciclo, id_miembro, monto, intereses, saldo_restante, estado, plazo_meses)
-        VALUES (:prom, :ciclo, :mem, :monto, :int, :saldo, 'vigente', :plazo)
-    """)
-    with engine.begin() as conn:
-        res = conn.execute(q, {"prom": id_promotora, "ciclo": id_ciclo, "mem": id_miembro, "monto": monto, "int": intereses, "saldo": monto, "plazo": plazo_meses})
-        try:
-            return res.lastrowid or True
-        except Exception:
-            return True
-
-def update_prestamo(id_prestamo:int, updates: dict):
-    engine = get_engine()
-    # ejemplo simple de update (mejor construir dinámico si hay muchos campos)
-    q = text("""
-        UPDATE prestamo SET monto=:monto, intereses=:intereses WHERE id_prestamo=:id
-    """)
-    with engine.begin() as conn:
-        conn.execute(q, {"monto": updates.get("monto"), "intereses": updates.get("intereses"), "id": id_prestamo})
-        return True
+    sql = """
+    INSERT INTO prestamo
+      (id_promotora, id_ciclo, id_miembro, monto, intereses, saldo_restante, estado, plazo_meses, total_cuotas, fecha_solicitud)
+    VALUES
+      (:id_prom, :id_ciclo, :id_miembro, :monto, :intereses, :saldo, :estado, :plazo, :total_cuotas, :fecha_solicitud)
+    """
+    params = {
+        "id_prom": id_promotora,
+        "id_ciclo": id_ciclo,
+        "id_miembro": id_miembro,
+        "monto": monto,
+        "intereses": intereses,
+        "saldo": monto,
+        "estado": "activo",
+        "plazo": plazo_meses,
+        "total_cuotas": 0,
+        "fecha_solicitud": fecha_solicitud_val
+    }
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(text(sql), params)
+            # Respuesta depende del driver; si no hay lastrowid, puedes SELECT MAX(id_prestamo)
+            try:
+                return res.lastrowid
+            except Exception:
+                r = conn.execute(text("SELECT LAST_INSERT_ID() as id")).fetchone()
+                return r["id"] if r else None
+    except Exception as e:
+        # lanza para que la página muestre el error real
+        raise RuntimeError(f"Error creando prestamo: {e}")
 
