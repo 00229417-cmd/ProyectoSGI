@@ -1,99 +1,71 @@
 # modulos/pages/reporte_page.py
 import streamlit as st
-
-# IMPORTS DIRECTOS (Opción A — recomendada)
-from modulos.db.crud_reporte import create_reporte, list_reportes
-from modulos.db.crud_ciclo import list_ciclos
-from modulos.db.crud_administrador import list_administradores
-
+from modulos.db import crud_reporte, crud_ciclo, crud_administrador
 
 def render_reporte():
-    st.markdown("## 📄 Gestión de Reportes")
+    st.title("Reportes")
 
-    # ================================
-    # LISTAR REPORTES EXISTENTES
-    # ================================
-    st.markdown("### 📑 Historial de reportes generados")
+    # Menú desplegable (mantener siempre como botón/desplegable como pediste)
+    with st.expander("Generar nuevo reporte", expanded=True):
+        # lista de tipos (puedes ampliar)
+        tipos = ["mora", "cierre", "balance", "morosidad"]
+        tipo = st.selectbox("Tipo de reporte", tipos)
 
-    try:
-        df = list_reportes()
-        if df is not None and len(df) > 0:
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info("No hay reportes generados.")
-    except Exception as e:
-        st.error(f"Error cargando reportes: {e}")
+        # Ciclos: cargar id y mostrar etiqueta; obligamos a seleccionar un id válido (int)
+        ciclos = crud_ciclo.list_ciclos()  # se espera [(id, descripcion), ...] o lista de dicts
+        ciclos_opts = []
+        for c in ciclos:
+            # soporta tu CRUD retornando dicts o tuplas
+            if isinstance(c, dict):
+                ciclos_opts.append((c.get("id_ciclo"), f"{c.get('id_ciclo')} - {c.get('fecha_inicio')}"))
+            else:
+                # tupla ejemplo (id, fecha_inicio)
+                ciclos_opts.append((c[0], f"{c[0]}"))
 
-    st.divider()
+        ciclos_map = {label: _id for _id, label in ciclos_opts}
+        selected_label = st.selectbox("Ciclo (id)", [label for _id, label in ciclos_opts])
+        id_ciclo = ciclos_map[selected_label]
 
-    # ================================
-    # BOTÓN DESPLEGABLE (OBLIGATORIO)
-    # ================================
-    with st.expander("➕ Crear nuevo reporte"):
-        st.markdown("### 📝 Datos del nuevo reporte")
+        # Administrador (opcional) — cargar lista similar
+        admins = crud_administrador.list_administradores()
+        admin_map = {}
+        admin_labels = []
+        for a in admins:
+            if isinstance(a, dict):
+                lbl = f"{a.get('id_administrador')} - {a.get('nombre')}"
+                admin_map[lbl] = a.get('id_administrador')
+            else:
+                lbl = f"{a[0]}"
+                admin_map[lbl] = a[0]
+            admin_labels.append(lbl)
+        id_admin = admin_map[st.selectbox("Administrador (opcional)", ["-"] + admin_labels)] if admin_labels else None
+        if id_admin == "-":
+            id_admin = None
 
-        # ----------------------------
-        # Seleccionar ciclo
-        # ----------------------------
-        try:
-            ciclos = list_ciclos()
-            if ciclos is None or len(ciclos) == 0:
-                st.warning("⚠ No hay ciclos registrados.")
-                return
-            
-            ciclos_dict = {f"Ciclo {c['id_ciclo']} — {c['estado']}": c['id_ciclo'] for c in ciclos}
-            ciclo_nombre = st.selectbox("Selecciona el ciclo:", list(ciclos_dict.keys()))
-            id_ciclo = ciclos_dict[ciclo_nombre]
+        desc = st.text_area("Descripción (opcional)")
 
-        except Exception as e:
-            st.error(f"Error cargando ciclos: {e}")
-            return
-
-        # ----------------------------
-        # Administrador que genera el reporte
-        # ----------------------------
-        try:
-            admins = list_administradores()
-            if admins is None or len(admins) == 0:
-                st.warning("⚠ No hay administradores registrados.")
-                return
-            
-            admins_dict = {f"{a['nombre']} {a['apellido']}": a['id_administrador'] for a in admins}
-            admin_nombre = st.selectbox("Administrador que genera:", list(admins_dict.keys()))
-            id_adm = admins_dict[admin_nombre]
-
-        except Exception as e:
-            st.error(f"Error cargando administradores: {e}")
-            return
-
-        # ----------------------------
-        # Tipo de reporte
-        # ----------------------------
-        tipo = st.selectbox("Tipo de reporte:", ["mora", "balance", "cierre"])
-
-        # ----------------------------
-        # Descripción opcional
-        # ----------------------------
-        descripcion = st.text_area("Descripción (opcional):")
-
-        # ----------------------------
-        # GUARDAR REPORTE
-        # ----------------------------
-        if st.button("💾 Guardar reporte"):
+        if st.button("Generar reporte"):
+            # validar que id_ciclo sea entero
             try:
-                ok, msg = create_reporte(
-                    id_ciclo=id_ciclo,
-                    id_administrador=id_adm,
-                    tipo=tipo,
-                    descripcion=descripcion
-                )
+                id_ciclo_int = int(id_ciclo)
+            except Exception:
+                st.error("Selecciona un ciclo válido (ID numérico).")
+                return
 
-                if ok:
-                    st.success("✅ Reporte creado correctamente")
-                    st.rerun()
-                else:
-                    st.error(f"❌ No se pudo crear el reporte: {msg}")
+            ok, msg = crud_reporte.create_reporte(id_ciclo_int, id_admin, tipo, desc)
+            if ok:
+                st.success("Reporte creado y encola para generación.")
+                st.rerun()
+            else:
+                st.error(f"Error creando reporte: {msg}")
 
-            except Exception as e:
-                st.error(f"Error creando reporte: {e}")
+    # listado de reportes
+    st.markdown("---")
+    st.header("Reportes generados")
+    try:
+        reportes = crud_reporte.list_reportes(limit=200)
+        st.table(reportes)
+    except Exception as e:
+        st.error(f"Error listando reportes: {e}")
+
 
