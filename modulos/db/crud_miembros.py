@@ -1,157 +1,128 @@
-# modulos/pages/miembros_page.py
+# modulos/db/crud_miembros.py
+"""
+CRUD REAL para la tabla 'miembro'
 
-import streamlit as st
-from modulos.db.crud_miembros import (
-    list_members,
-    search_members,
-    create_member,
-    update_member,
-    delete_member,
-)
+Columnas vistas en tu phpMyAdmin:
+id_miembro, id_tipo_usuario, nombre, apellido, dui, direccion
+"""
 
-# -----------------------------
-# --- ESTILOS PREMIUM ----------
-# -----------------------------
-st.markdown(
+from sqlalchemy import text
+from modulos.config.conexion import get_engine
+
+
+# ----------------------------------------
+# LISTAR MIEMBROS
+# ----------------------------------------
+def list_members(limit: int = 200):
     """
-    <style>
-    .member-card {
-        background: rgba(255,255,255,0.03);
-        padding: 18px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.05);
-        box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-        margin-bottom: 18px;
-    }
-    .table-container {
-        background: rgba(255,255,255,0.03);
-        padding: 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.05);
-        box-shadow: 0 6px 18px rgba(0,0,0,0.28);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+    Devuelve una lista de miembros.
+    """
+    engine = get_engine()
+    with engine.connect() as conn:
+        q = text("""
+            SELECT 
+                id_miembro AS id,
+                nombre,
+                apellido,
+                dui,
+                direccion,
+                id_tipo_usuario
+            FROM miembro
+            ORDER BY id_miembro DESC
+            LIMIT :lim
+        """)
+        rows = conn.execute(q, {"lim": limit}).mappings().all()
+        return [dict(r) for r in rows]
 
-# ================================
-# PAGE TITLE
-# ================================
-st.header("👥 Gestión de Miembros")
 
-st.write("Administra los miembros del sistema GAPC.")
+# ----------------------------------------
+# CREAR MIEMBRO
+# ----------------------------------------
+def create_member(nombre: str, apellido: str, dui: str, direccion: str, tipo_usuario: int):
+    engine = get_engine()
+    with engine.begin() as conn:
+        q = text("""
+            INSERT INTO miembro (nombre, apellido, dui, direccion, id_tipo_usuario)
+            VALUES (:n, :a, :d, :dir, :t)
+        """)
+        try:
+            conn.execute(q, {
+                "n": nombre,
+                "a": apellido,
+                "d": dui,
+                "dir": direccion,
+                "t": tipo_usuario
+            })
+            return True
+        except Exception as e:
+            print("ERROR create_member:", e)
+            return False
 
-# ================================
-# BUSCADOR
-# ================================
-st.subheader("🔎 Buscar miembros")
 
-search = st.text_input("Buscar por nombre, apellido o DUI:")
+# ----------------------------------------
+# OBTENER MIEMBRO POR ID
+# ----------------------------------------
+def get_member_by_id(member_id: int):
+    engine = get_engine()
+    with engine.connect() as conn:
+        q = text("""
+            SELECT 
+                id_miembro AS id,
+                nombre,
+                apellido,
+                dui,
+                direccion,
+                id_tipo_usuario
+            FROM miembro
+            WHERE id_miembro = :id
+            LIMIT 1
+        """)
+        row = conn.execute(q, {"id": member_id}).mappings().first()
+        return dict(row) if row else None
 
-if search.strip():
-    members = search_members(search)
-else:
-    members = list_members()
 
-# ================================
-# TABLA DE RESULTADOS
-# ================================
-st.subheader("📋 Lista de miembros")
+# ----------------------------------------
+# ACTUALIZAR MIEMBRO
+# ----------------------------------------
+def update_member(member_id: int, nombre: str, apellido: str, dui: str, direccion: str, tipo_usuario: int):
+    engine = get_engine()
+    with engine.begin() as conn:
+        q = text("""
+            UPDATE miembro
+            SET nombre = :n,
+                apellido = :a,
+                dui = :d,
+                direccion = :dir,
+                id_tipo_usuario = :t
+            WHERE id_miembro = :id
+        """)
+        try:
+            conn.execute(q, {
+                "n": nombre,
+                "a": apellido,
+                "d": dui,
+                "dir": direccion,
+                "t": tipo_usuario,
+                "id": member_id
+            })
+            return True
+        except Exception as e:
+            print("ERROR update_member:", e)
+            return False
 
-if members:
-    st.markdown('<div class="table-container">', unsafe_allow_html=True)
-    st.dataframe(members, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-else:
-    st.info("No se encontraron miembros.")
 
-# =======================================================
-# FORMULARIO DE CREACIÓN
-# =======================================================
-st.subheader("➕ Registrar nuevo miembro")
+# ----------------------------------------
+# ELIMINAR MIEMBRO
+# ----------------------------------------
+def delete_member(member_id: int):
+    engine = get_engine()
+    with engine.begin() as conn:
+        q = text("DELETE FROM miembro WHERE id_miembro = :id")
+        try:
+            conn.execute(q, {"id": member_id})
+            return True
+        except Exception as e:
+            print("ERROR delete_member:", e)
+            return False
 
-with st.form("create_member_form"):
-    col1, col2 = st.columns(2)
-
-    with col1:
-        nombre = st.text_input("Nombre")
-        apellido = st.text_input("Apellido")
-        dui = st.text_input("DUI (opcional)")
-    with col2:
-        id_tipo_usuario = st.number_input("ID Tipo de usuario", min_value=1, step=1)
-        direccion = st.text_area("Dirección (opcional)")
-
-    submit_create = st.form_submit_button("Crear miembro")
-
-    if submit_create:
-        if not nombre or not apellido:
-            st.error("Nombre y apellido son obligatorios.")
-        else:
-            ok = create_member(
-                id_tipo_usuario=id_tipo_usuario,
-                nombre=nombre,
-                apellido=apellido,
-                dui=dui,
-                direccion=direccion,
-            )
-            if ok:
-                st.success("Miembro creado correctamente.")
-                st.experimental_rerun()
-            else:
-                st.error("Error creando el miembro.")
-
-# =======================================================
-# SECCIÓN DE EDICIÓN / ELIMINACIÓN
-# =======================================================
-st.subheader("✏️ Editar o eliminar miembro")
-
-if not members:
-    st.info("No hay miembros para editar.")
-else:
-    ids = [m["id_miembro"] for m in members]
-    selected_id = st.selectbox("Seleccionar miembro por ID:", ids)
-
-    m = next((x for x in members if x["id_miembro"] == selected_id), None)
-
-    if m:
-        with st.expander(f"Editar miembro: {m['nombre']} {m['apellido']}", expanded=False):
-
-            with st.form("edit_member_form"):
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    new_nombre = st.text_input("Nombre", m["nombre"])
-                    new_apellido = st.text_input("Apellido", m["apellido"])
-                    new_dui = st.text_input("DUI", m["dui"])
-                with col2:
-                    new_tipo = st.number_input("ID Tipo usuario", min_value=1, value=m["id_tipo_usuario"])
-                    new_direccion = st.text_area("Dirección", m["direccion"] or "")
-
-                col3, col4 = st.columns(2)
-                submit_edit = col3.form_submit_button("Guardar cambios")
-                delete_btn = col4.form_submit_button("Eliminar miembro")
-
-                if submit_edit:
-                    ok = update_member(
-                        member_id=selected_id,
-                        id_tipo_usuario=new_tipo,
-                        nombre=new_nombre,
-                        apellido=new_apellido,
-                        dui=new_dui,
-                        direccion=new_direccion,
-                    )
-                    if ok:
-                        st.success("Miembro actualizado correctamente.")
-                        st.experimental_rerun()
-                    else:
-                        st.error("Error al actualizar miembro.")
-
-                if delete_btn:
-                    ok = delete_member(selected_id)
-                    if ok:
-                        st.warning("Miembro eliminado.")
-                        st.experimental_rerun()
-                    else:
-                        st.error("No se pudo eliminar el miembro.")
 
