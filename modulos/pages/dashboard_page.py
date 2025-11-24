@@ -1,40 +1,62 @@
 # modulos/pages/dashboard_page.py
 import streamlit as st
+import pandas as pd
 from sqlalchemy import text
-from modulos.config.conexion import get_engine
-
-ICON = "📊"
+from modulos.config.conexion import get_engine, test_connection
 
 def render_dashboard():
-    st.markdown(f"## {ICON} Dashboard")
-    engine = None
-    try:
-        engine = get_engine()
-    except Exception as e:
-        st.error(f"No se pudo obtener conexión a la DB: {e}")
-        return
+    st.markdown("### 📊 Dashboard — Resumen operativo")
 
-    # Helpers con try/except para consultas simples
-    def _safe_count(query: str) -> str:
+    ok, msg = test_connection()
+    if not ok:
+        st.warning(f"DB: NO CONECTADO ({msg})")
+        return
+    else:
+        st.success("DB conectado")
+
+    engine = get_engine()
+
+    # Queries seguras con try/except para no romper la página si faltan tablas/columnas
+    def safe_scalar(sql, params=None):
         try:
             with engine.connect() as conn:
-                res = conn.execute(text(query)).scalar()
-            return str(int(res or 0))
-        except Exception as e:
-            return f"ERR: {e}"
+                r = conn.execute(text(sql), params or {}).scalar()
+                return r
+        except Exception:
+            return None
 
-    total_miembros = _safe_count("SELECT COUNT(*) FROM miembro")
-    prestamos_vigentes = _safe_count("SELECT COUNT(*) FROM prestamo WHERE estado IS NULL OR estado NOT IN ('pagado','cerrado','cancelado')")
-    saldo_caja = _safe_count("SELECT SUM(saldo_final) FROM caja")
+    total_miembros = safe_scalar("SELECT COUNT(*) FROM miembro")
+    prestamos_vigentes = safe_scalar("SELECT COUNT(*) FROM prestamo WHERE estado IS NULL OR estado <> 'pagado'")
+    saldo_caja = safe_scalar("SELECT SUM(saldo_final) FROM caja")
 
+    # Mostrar métricas (si son None -> mostrar guión)
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total miembros", total_miembros)
-    c2.metric("Préstamos vigentes", prestamos_vigentes)
-    c3.metric("Saldo caja (suma)", saldo_caja)
+    c1.metric("Total miembros", str(total_miembros) if total_miembros is not None else "—")
+    c2.metric("Préstamos (aprox.)", str(prestamos_vigentes) if prestamos_vigentes is not None else "—")
+    c3.metric("Saldo caja (sum)", f"{saldo_caja:.2f}" if isinstance(saldo_caja, (int, float)) else ("—" if saldo_caja is None else str(saldo_caja)))
 
-    st.markdown("### Actividad reciente (placeholder)")
-    st.info("Aquí puedes agregar widgets/resúmenes. Si faltan tablas/columnas la métricas mostrarán `ERR:` con el mensaje SQL — revisa la estructura de BD.")
+    st.markdown("---")
+    st.subheader("Actividad reciente (últimos registros)")
 
+    # Intentar mostrar últimos aportes / pagos / reportes
+    recent_tables = {
+        "Aportes (aportes)": "SELECT id_aporte AS id, id_miembro, monto, fecha FROM aporte ORDER BY id_aporte DESC LIMIT 8",
+        "Pagos (pago)": "SELECT id_pago AS id, id_prestamo, fecha, monto FROM pago ORDER BY id_pago DESC LIMIT 8",
+        "Reportes (reporte)": "SELECT id_reporte AS id, tipo, fecha_generacion AS fecha, descripcion FROM reporte ORDER BY id_reporte DESC LIMIT 8"
+    }
 
+    for title, q in recent_tables.items():
+        try:
+            with engine.connect() as conn:
+                df = pd.read_sql_query(text(q), conn)
+        except Exception as e:
+            st.warning(f"No se pudo cargar {title}: {e}")
+            continue
+
+        if not df.empty:
+            st.markdown(f"**{title}**")
+            st.dataframe(df)
+        else:
+            st.info(f"No hay registros recientes en {title} (o la tabla no existe).")
 
 
