@@ -44,3 +44,46 @@ def list_users(limit: int = 200):
         rows = conn.execute(q, {"lim": limit}).mappings().all()
         return [dict(r) for r in rows]
 
+def change_password(user_id: int, current: str, new: str) -> bool:
+    """
+    Cambia la contraseña de un usuario:
+      - Verifica que el usuario exista.
+      - Comprueba que `current` coincide con la hash actual.
+      - Si OK, actualiza la hash por la de `new`.
+
+    Retorna True si el cambio se realizó correctamente, False en caso contrario.
+    """
+    engine = get_engine()
+    try:
+        # 1) obtener hash actual
+        with engine.connect() as conn:
+            r = conn.execute(
+                text("SELECT password_hash FROM users WHERE id = :id LIMIT 1"),
+                {"id": user_id}
+            ).mappings().first()
+
+        if not r:
+            return False  # usuario no existe
+
+        current_hash = r.get("password_hash")
+        if not current_hash:
+            return False
+
+        # 2) verificar contraseña actual
+        if not check_password_hash(current_hash, current):
+            return False  # contraseña actual incorrecta
+
+        # 3) generar nueva hash y actualizar
+        new_hash = generate_password_hash(new)
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE users SET password_hash = :ph WHERE id = :id"),
+                {"ph": new_hash, "id": user_id}
+            )
+
+        return True
+    except Exception:
+        # En producción querrás loggear el error; aquí devolvemos False para mantener la API simple
+        return False
+
+
