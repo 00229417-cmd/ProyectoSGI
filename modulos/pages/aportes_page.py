@@ -4,7 +4,7 @@ from datetime import date
 from modulos.db.crud_aporte import list_aportes, create_aporte
 
 def render_aportes():
-    st.title("💰 Aportes")
+    st.title("💰 Aportes/Ahorros")
 
     # Mostrar listado
     try:
