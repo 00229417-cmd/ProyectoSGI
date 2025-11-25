@@ -85,5 +85,103 @@ def change_password(user_id: int, current: str, new: str) -> bool:
     except Exception:
         # En producción querrás loggear el error; aquí devolvemos False para mantener la API simple
         return False
+from sqlalchemy import text
+from modulos.config.conexion import get_engine
+from werkzeug.security import generate_password_hash
+
+def update_role(user_id: int, new_role: str) -> bool:
+    """
+    Actualiza exclusivamente el rol de un usuario.
+    Retorna True si afectó al menos una fila, False en caso contrario.
+    """
+    try:
+        uid = int(user_id)
+    except Exception:
+        return False
+
+    engine = get_engine()
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(
+                text("UPDATE users SET role = :role WHERE id = :id"),
+                {"role": new_role, "id": uid},
+            )
+        return (res.rowcount if hasattr(res, "rowcount") else 0) > 0
+    except Exception:
+        return False
+
+
+def update_user(user_id: int, data: dict | None = None, *args) -> bool:
+    """
+    Actualiza campos de un usuario. Dos formas de uso:
+      - update_user(id, {"full_name": "...", "email": "...", "role": "...", "password": "..."})
+      - update_user(id, full_name, email)  <- fallback posicional (solo nombre y correo)
+
+    Campos permitidos en `data`: full_name, email, role, password, username (si lo permites).
+    Si se incluye 'password', se hashéa antes de guardar.
+
+    Retorna True si se actualizó (rowcount>0), False en caso contrario.
+    """
+    try:
+        uid = int(user_id)
+    except Exception:
+        return False
+
+    # fallback posicional: (full_name, email)
+    if data is None and args:
+        data = {}
+        if len(args) >= 1:
+            data["full_name"] = args[0]
+        if len(args) >= 2:
+            data["email"] = args[1]
+
+    if not data or not isinstance(data, dict):
+        return False
+
+    # filtrar solo campos permitidos
+    allowed = {"full_name", "email", "role", "password", "username"}
+    updates = {}
+    for k, v in data.items():
+        if k in allowed and v is not None:
+            updates[k] = v
+
+    if not updates:
+        return False
+
+    # si actualizan password, hashéala
+    if "password" in updates:
+        try:
+            updates["password_hash"] = generate_password_hash(updates.pop("password"))
+            # si tu tabla usa otra columna para hash, ajusta aquí
+        except Exception:
+            return False
+
+    # construir SET dinámico y parámetros
+    set_parts = []
+    params = {"id": uid}
+    col_map = {
+        "full_name": "full_name",
+        "email": "email",
+        "role": "role",
+        "username": "username",
+        "password_hash": "password_hash",
+    }
+
+    for i, (k, v) in enumerate(updates.items()):
+        col = col_map.get(k, k)
+        param_name = f"p{i}"
+        set_parts.append(f"{col} = :{param_name}")
+        params[param_name] = v
+
+    set_clause = ", ".join(set_parts)
+    sql = text(f"UPDATE users SET {set_clause} WHERE id = :id")
+
+    engine = get_engine()
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(sql, params)
+        return (res.rowcount if hasattr(res, "rowcount") else 0) > 0
+    except Exception:
+        return False
 
 
