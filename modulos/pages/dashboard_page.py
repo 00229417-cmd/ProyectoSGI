@@ -40,13 +40,7 @@ def _fmt_number(val):
 def render_dashboard():
     st.markdown("### 📊 Dashboard — Resumen operativo")
 
-    ok, msg = test_connection()
-    if ok:
-        st.caption("🟢 Conexión establecida")
-    else:
-        st.caption(f"🔴 Error de conexión: {msg}")
-        # Aún así intentar mostrar algo local o salir
-        st.warning("No se puede conectar a la base de datos. Algunas métricas no estarán disponibles.")
+
     
     engine = None
     try:
