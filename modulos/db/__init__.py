@@ -1,19 +1,20 @@
 # modulos/db/__init__.py
 import importlib
-import pkgutil
-import sys
-from pathlib import Path
 
-# Auto-import modules presentes en el directorio modulos/db
-# Esto evita que la importación falle si algún CRUD no existe.
-base = Path(__file__).parent
-for finder, name, ispkg in pkgutil.iter_modules([str(base)]):
+__all__ = []
+
+crud_modules = [
+    "crud_miembros", "crud_ahorro", "crud_aporte", "crud_prestamo",
+    "crud_cuota", "crud_caja", "crud_reunion", "crud_asistencia",
+    "crud_multa", "crud_cierre", "crud_promotora", "crud_grupo",
+    "crud_ciclo", "crud_reporte", "crud_users"
+]
+
+for name in crud_modules:
     try:
         module = importlib.import_module(f"modulos.db.{name}")
         globals()[name] = module
+        __all__.append(name)
     except Exception:
-        # no romper la importación general si algún archivo tiene errores
         pass
-
-__all__ = [name for _, name, _ in pkgutil.iter_modules([str(base)])]
 
